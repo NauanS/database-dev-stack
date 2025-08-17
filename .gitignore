@@ -1,0 +1,83 @@
+# ===================================
+# GITIGNORE PARA AMBIENTE DE DESENVOLVIMENTO
+# ===================================
+
+# Arquivo de ambiente com senhas reais
+.env
+.env.local
+.env.production
+.env.staging
+
+# Dados dos bancos de dados
+data/
+**/data/
+volumes/
+
+# Configurações locais (podem conter dados sensíveis)
+configs/
+# Exceções para arquivos de configuração essenciais
+!configs/mysql/conf.d/custom.cnf
+!configs/redis/redis.conf
+
+# Logs
+logs/
+*.log
+**/*.log
+
+# Backups
+backups/
+*.sql
+*.dump
+*.backup
+
+# Arquivos temporários
+temp/
+tmp/
+.tmp/
+*_OLD
+*_NEW
+*.backup.*
+bkp/
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Certificados e chaves
+*.pem
+*.key
+*.crt
+*.p12
+certificates/
+
+# Cache
+.cache/
+node_modules/
+.npm/
+
+# Arquivos de configuração local específicos
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Arquivos de monitoramento
+monitoring/grafana/data/
+monitoring/prometheus/data/
+
+# Dados específicos dos bancos
+postgres/
+mysql/
+mariadb/
+mongodb/
+redis-data/
+firebird_data/
+
+# Arquivos de estado do Rancher
+rancher-data/
+
+# Outros arquivos sensíveis
+secrets/
+.secrets/
+.env.*
+!.env.example
