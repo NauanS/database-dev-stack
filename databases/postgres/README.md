@@ -6,6 +6,7 @@ Sistema automatizado de backup, restauração e sincronização para PostgreSQL 
 
 - ✅ **Backup comprimido** - economia de ~44% com gzip
 - ✅ **Validação automática** - integridade verificada após cada backup
+- ✅ **Dashboard visual** - métricas e gráficos em HTML (Chart.js)
 - ✅ **Notificações Discord** - tabelas formatadas com status
 - ✅ **Google Drive sync** - backup remoto automático via rclone
 - ✅ **Retenção inteligente** - mantém últimos 7 dias
@@ -17,6 +18,7 @@ Sistema automatizado de backup, restauração e sincronização para PostgreSQL 
 ```
 databases/postgres/
 ├── backup-manager.sh           # 🎯 Menu principal (COMECE AQUI!)
+├── dashboard.html              # 📊 Dashboard visual de métricas
 ├── README.md                   # Esta documentação
 ├── docs/                       # Documentação adicional
 │   ├── SETUP.md                # Guia de instalação
@@ -26,10 +28,13 @@ databases/postgres/
 │   ├── backup-postgres.sh      # Backup core
 │   ├── restore-postgres.sh     # Restauração interativa
 │   ├── sync-gdrive.sh          # Sync Google Drive
+│   ├── update-dashboard.sh     # Atualiza dashboard com métricas
 │   ├── load-env.sh             # Carregador de .env
 │   ├── .env                    # Configurações locais (não commitar!)
 │   └── .env.example            # Template de configuração
 └── bkps/                       # Backups locais (.sql.gz)
+    └── metrics/                # Métricas em JSON (não commitadas)
+        └── .gitkeep            # Garante estrutura no git
 ```
 
 ---
@@ -80,7 +85,8 @@ cd databases/postgres
 3) ☁️  Sincronizar com Google Drive
 4) ⚙️  Configurar sistema (setup completo)
 5) 🔍 Verificar sistema
-6) 🚪 Sair
+6) � Dashboard de métricas
+7) �🚪 Sair
 ```
 
 **Ou use linha de comando:**
@@ -90,6 +96,7 @@ cd databases/postgres
 ./backup-manager.sh restore     # Restaurar
 ./backup-manager.sh sync        # Sync Google Drive
 ./backup-manager.sh check       # Verificar sistema
+./backup-manager.sh metrics     # Ver dashboard de métricas
 ```
 
 > 💡 **Dica:** O `backup-manager.sh` está na raiz da pasta `postgres/` para fácil acesso!
@@ -199,6 +206,69 @@ Total: 8.0KB  •  Duração: 13s
 - ✓ Arquivo .env existe
 - ✓ Webhook Discord configurado
 - ✓ Diretório de backups criado
+
+### 5. Dashboard de Métricas
+
+```bash
+./backup-manager.sh metrics
+# ou
+xdg-open dashboard.html
+```
+
+**O que mostra:**
+
+📊 **Estatísticas Gerais:**
+
+- Total de backups executados
+- Taxa de sucesso (%)
+- Tamanho total dos backups
+- Tempo médio de execução
+
+📈 **Gráficos:**
+
+- Evolução do tamanho dos backups (últimos 30 dias)
+- Tempo de execução por backup
+
+📋 **Tabelas:**
+
+- Detalhes por banco de dados (tamanho, tabelas, status de validação)
+- Histórico completo de backups
+
+**Como funciona:**
+
+1. Cada backup gera um arquivo JSON em `bkps/metrics/YYYY-MM-DD.json`
+2. O script `update-dashboard.sh` atualiza o `dashboard.html` com os dados
+3. O dashboard é um arquivo HTML estático - abre direto no navegador!
+
+**Atualizar manualmente:**
+
+```bash
+./scripts/update-dashboard.sh
+```
+
+**Métricas salvas:**
+
+```json
+{
+  "date": "2026-03-21",
+  "summary": {
+    "total_backups": 1,
+    "success_rate": 100.0,
+    "total_size_mb": 0.001,
+    "duration_seconds": 1
+  },
+  "databases": [
+    {
+      "name": "dev_database",
+      "size_mb": 0.001,
+      "tables_count": 2,
+      "validation": { "passed": true }
+    }
+  ]
+}
+```
+
+> 💡 **Dica:** Edite os JSONs em `bkps/metrics/` e rode `update-dashboard.sh` para testar visualizações!
 
 ---
 
@@ -322,10 +392,23 @@ ls -lh bkps/*.sql.gz
 - `bkps/backup.log` - Log de backups
 - `bkps/sync.log` - Log de sincronizações
 
+**Métricas:**
+
+- `bkps/metrics/*.json` - Métricas em JSON por data (YYYY-MM-DD.json)
+- `dashboard.html` - Visualização interativa das métricas
+
 **Listar backups:**
 
 ```bash
 ls -lh bkps/*.sql.gz
+```
+
+**Ver métricas:**
+
+```bash
+cat bkps/metrics/$(date +%Y-%m-%d).json
+# ou
+./backup-manager.sh metrics  # Dashboard visual
 ```
 
 **Espaço usado:**
@@ -348,6 +431,7 @@ rclone ls gdrive-ns17:bkps
 
 - `scripts/.env` - Webhook Discord e configurações
 - `bkps/*.sql.gz` - Backups dos bancos
+- `bkps/metrics/*.json` - Métricas de backup (geradas automaticamente)
 - `*.log` - Logs do sistema
 
 **Template público:**

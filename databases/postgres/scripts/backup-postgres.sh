@@ -240,12 +240,78 @@ for DB in $DATABASES; do
     fi
 done
 
-# Limpa diretório temporário
-rm -rf "$TEMP_DIR"
-
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
-TOTAL_SIZE_MB=$((TOTAL_SIZE / 1024 / 1024))
+TOTAL_SIZE_MB=$(LC_NUMERIC=C awk "BEGIN {printf \"%.3f\", $TOTAL_SIZE / 1024 / 1024}")
+
+# 4. Salva métricas em JSON
+METRICS_DIR="$BACKUP_DIR/metrics"
+mkdir -p "$METRICS_DIR"
+METRICS_FILE="$METRICS_DIR/${DATE_SIMPLE}.json"
+
+# Constrói JSON com métricas do dia (força locale para ponto decimal)
+cat > "$METRICS_FILE" << EOF
+{
+  "date": "$DATE_SIMPLE",
+  "timestamp": "$DATE_FORMAT",
+  "summary": {
+    "total_backups": $BACKUP_COUNT,
+    "failed_backups": $FAILED_COUNT,
+    "success_rate": $(LC_NUMERIC=C awk "BEGIN {printf \"%.2f\", ($BACKUP_COUNT / ($BACKUP_COUNT + $FAILED_COUNT)) * 100}"),
+    "total_size_mb": $TOTAL_SIZE_MB,
+    "duration_seconds": $DURATION
+  },
+  "databases": [
+EOF
+
+# Adiciona métricas de cada banco
+FIRST=true
+for DB in $DATABASES; do
+    RESULT_FILE="$TEMP_DIR/${DB}.result"
+    if [ -f "$RESULT_FILE" ]; then
+        IFS='|' read -r STATUS DB_NAME BACKUP_SIZE DB_STATUS RESTORE_STATUS BACKUP_SIZE_BYTES TABLE_COUNT < "$RESULT_FILE"
+        
+        if [ "$FIRST" = true ]; then
+            FIRST=false
+        else
+            echo "," >> "$METRICS_FILE"
+        fi
+        
+        BACKUP_SIZE_MB=$(LC_NUMERIC=C awk "BEGIN {printf \"%.3f\", $BACKUP_SIZE_BYTES / 1024 / 1024}")
+        SUCCESS_FLAG=$([ "$STATUS" = "SUCCESS" ] && echo "true" || echo "false")
+        VALIDATION_FLAG=$([ "$RESTORE_STATUS" = "✅" ] && echo "true" || echo "false")
+        
+        cat >> "$METRICS_FILE" << DBEOF
+    {
+      "name": "$DB_NAME",
+      "status": "$DB_STATUS",
+      "success": $SUCCESS_FLAG,
+      "size_mb": $BACKUP_SIZE_MB,
+      "size_human": "$BACKUP_SIZE",
+      "tables_count": $TABLE_COUNT,
+      "validation": {
+        "status": "$RESTORE_STATUS",
+        "passed": $VALIDATION_FLAG
+      }
+    }
+DBEOF
+    fi
+done
+
+# Fecha JSON
+cat >> "$METRICS_FILE" << EOF
+
+  ]
+}
+EOF
+
+log "📊 Métricas salvas em: $METRICS_FILE"
+
+# Atualiza dashboard.html chamando script separado
+"$SCRIPT_DIR/update-dashboard.sh"
+
+# Limpa diretório temporário
+rm -rf "$TEMP_DIR"
 
 # Resumo
 echo ""

@@ -46,6 +46,7 @@ show_menu() {
     echo -e "${BLUE}│${NC}                                             ${BLUE}│${NC}"
     echo -e "${BLUE}│${NC}  ${YELLOW}4)${NC} ⚙️  Setup Inicial (primeira vez)      ${BLUE}│${NC}"
     echo -e "${BLUE}│${NC}  ${YELLOW}5)${NC} 🔍 Verificar Ambiente                 ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}  ${MAGENTA}6)${NC} 📊 Ver Métricas (Dashboard)           ${BLUE}│${NC}"
     echo -e "${BLUE}│${NC}                                             ${BLUE}│${NC}"
     echo -e "${BLUE}│${NC}  ${RED}0)${NC} 🚪 Sair                                ${BLUE}│${NC}"
     echo -e "${BLUE}│${NC}                                             ${BLUE}│${NC}"
@@ -228,6 +229,54 @@ pause() {
     read -p "Pressione ENTER para continuar..." dummy
 }
 
+# Ver métricas (dashboard)
+view_metrics() {
+    echo -e "${MAGENTA}═══════════════════════════════════════════════${NC}"
+    echo -e "${MAGENTA}  📊 Dashboard de Métricas${NC}"
+    echo -e "${MAGENTA}═══════════════════════════════════════════════${NC}"
+    echo ""
+    
+    local dashboard_path="$SCRIPT_DIR/dashboard.html"
+    
+    if [ ! -f "$dashboard_path" ]; then
+        echo -e "${RED}❌ Dashboard não encontrado: $dashboard_path${NC}"
+        pause
+        return
+    fi
+    
+    # Verifica se há métricas
+    local metrics_dir="$SCRIPT_DIR/bkps/metrics"
+    if [ ! -d "$metrics_dir" ] || [ -z "$(ls -A $metrics_dir/*.json 2>/dev/null)" ]; then
+        echo -e "${YELLOW}⚠️  Nenhuma métrica encontrada!${NC}"
+        echo ""
+        echo "Execute um backup primeiro para gerar métricas:"
+        echo -e "  ${CYAN}./backup-manager.sh backup${NC}"
+        echo ""
+        pause
+        return
+    fi
+    
+    echo -e "${GREEN}✅ Dashboard encontrado: $dashboard_path${NC}"
+    echo ""
+    
+    # Abre o arquivo HTML diretamente no navegador
+    if command -v xdg-open &> /dev/null; then
+        xdg-open "$dashboard_path" 2>/dev/null &
+        echo -e "${GREEN}✅ Dashboard aberto no navegador!${NC}"
+    elif command -v open &> /dev/null; then
+        open "$dashboard_path" 2>/dev/null &
+        echo -e "${GREEN}✅ Dashboard aberto no navegador!${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Não foi possível abrir automaticamente.${NC}"
+        echo "Abra manualmente: $dashboard_path"
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}💡 Para atualizar dados: execute um backup ou rode update-dashboard.sh${NC}"
+    echo ""
+    pause
+}
+
 # Loop principal
 main() {
     while true; do
@@ -251,6 +300,9 @@ main() {
                 ;;
             5)
                 check_environment "interactive"
+                ;;
+            6)
+                view_metrics
                 ;;
             0)
                 echo ""
@@ -285,8 +337,19 @@ if [ $# -gt 0 ]; then
         check|c)
             check_environment
             ;;
+        metrics|dashboard|m)
+            view_metrics
+            ;;
         *)
-            echo "Uso: $0 [backup|restore|sync|setup|check]"
+            echo "Uso: $0 [backup|restore|sync|setup|check|metrics]"
+            echo ""
+            echo "Comandos disponíveis:"
+            echo "  backup, b         - Executar backup"
+            echo "  restore, r        - Restaurar backup"
+            echo "  sync, s           - Sincronizar Google Drive"
+            echo "  setup             - Setup inicial"
+            echo "  check, c          - Verificar ambiente"
+            echo "  metrics, m        - Ver dashboard de métricas"
             echo ""
             echo "Ou execute sem argumentos para o menu interativo"
             exit 1

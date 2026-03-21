@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard de Backups PostgreSQL</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      header {
+        background: white;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        margin-bottom: 30px;
+      }
+
+      h1 {
+        color: #667eea;
+        font-size: 2.5em;
+        margin-bottom: 10px;
+      }
+
+      .subtitle {
+        color: #666;
+        font-size: 1.1em;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+      }
+
+      .stat-card {
+        background: white;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s;
+      }
+
+      .stat-card:hover {
+        transform: translateY(-5px);
+      }
+
+      .stat-label {
+        color: #666;
+        font-size: 0.9em;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+      }
+
+      .stat-value {
+        font-size: 2.5em;
+        font-weight: bold;
+        color: #667eea;
+      }
+
+      .stat-unit {
+        font-size: 0.5em;
+        color: #999;
+      }
+
+      .chart-container {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        margin-bottom: 30px;
+      }
+
+      .chart-title {
+        font-size: 1.5em;
+        color: #333;
+        margin-bottom: 20px;
+      }
+
+      canvas {
+        max-height: 400px;
+      }
+
+      table {
+        width: 100%;
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      }
+
+      th {
+        background: #667eea;
+        color: white;
+        padding: 15px;
+        text-align: left;
+        font-weight: 600;
+      }
+
+      td {
+        padding: 15px;
+        border-bottom: 1px solid #eee;
+      }
+
+      tr:hover {
+        background: #f8f9fa;
+      }
+
+      .status-success {
+        color: #28a745;
+        font-weight: bold;
+      }
+
+      .status-failed {
+        color: #dc3545;
+        font-weight: bold;
+      }
+
+      .btn-refresh {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 8px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.3s;
+        margin-bottom: 20px;
+      }
+
+      .btn-refresh:hover {
+        background: #5568d3;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: white;
+        font-size: 1.2em;
+      }
+
+      .error {
+        background: #dc3545;
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>📊 Dashboard de Backups PostgreSQL</h1>
+        <p class="subtitle">Monitoramento e métricas de backups automáticos</p>
+        <button class="btn-refresh" onclick="loadMetrics()">
+          🔄 Atualizar Dados
+        </button>
+      </header>
+
+      <div id="loading" class="loading">Carregando métricas...</div>
+      <div id="error" style="display: none"></div>
+
+      <div id="dashboard" style="display: none">
+        <!-- Cards de estatísticas -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total de Backups</div>
+            <div class="stat-value" id="totalBackups">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Taxa de Sucesso</div>
+            <div class="stat-value" id="successRate">
+              0<span class="stat-unit">%</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tamanho Total</div>
+            <div class="stat-value" id="totalSize">
+              0<span class="stat-unit">MB</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tempo Médio</div>
+            <div class="stat-value" id="avgDuration">
+              0<span class="stat-unit">s</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gráfico de evolução do tamanho -->
+        <div class="chart-container">
+          <h3 class="chart-title">📈 Evolução do Tamanho dos Backups</h3>
+          <canvas id="sizeChart"></canvas>
+        </div>
+
+        <!-- Gráfico de duração -->
+        <div class="chart-container">
+          <h3 class="chart-title">⏱️ Tempo de Execução</h3>
+          <canvas id="durationChart"></canvas>
+        </div>
+
+        <!-- Tabela de bancos -->
+        <div class="chart-container">
+          <h3 class="chart-title">💾 Detalhes por Banco de Dados</h3>
+          <table id="databaseTable">
+            <thead>
+              <tr>
+                <th>Banco</th>
+                <th>Último Backup</th>
+                <th>Tamanho</th>
+                <th>Tabelas</th>
+                <th>Status</th>
+                <th>Validação</th>
+              </tr>
+            </thead>
+            <tbody id="databaseTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Tabela de histórico -->
+        <div class="chart-container">
+          <h3 class="chart-title">📅 Histórico de Backups</h3>
+          <table id="historyTable">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Backups</th>
+                <th>Sucesso</th>
+                <th>Falhas</th>
+                <th>Tamanho Total</th>
+                <th>Duração</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let sizeChart = null;
+      let durationChart = null;
+
+      // DADOS EMBUTIDOS - Atualizados automaticamente pelo backup-postgres.sh
+      // @@METRICS_DATA_START@@
+      const metricsData = [{
+  "date": "2026-03-20",
+  "timestamp": "2026-03-20_15:42:18",
+  "summary": {
+    "total_backups": 1,
+    "failed_backups": 0,
+    "success_rate": 100.0,
+    "total_size_mb": 0.001,
+    "duration_seconds": 0
+  },
+  "databases": [
+    {
+      "name": "dev_database",
+      "status": "✅",
+      "success": true,
+      "size_mb": 0.001,
+      "size_human": "4,0K",
+      "tables_count": 2,
+      "validation": {
+        "status": "✅",
+        "passed": true
+      }
+    }
+  ]
+},{
+  "date": "2026-03-21",
+  "timestamp": "2026-03-21_15:55:38",
+  "summary": {
+    "total_backups": 1,
+    "failed_backups": 0,
+    "success_rate": 100.00,
+    "total_size_mb": 0.001,
+    "duration_seconds": 1
+  },
+  "databases": [
+    {
+      "name": "dev_database",
+      "status": "✅",
+      "success": true,
+      "size_mb": 0.001,
+      "size_human": "4,0K",
+      "tables_count": 2,
+      "validation": {
+        "status": "✅",
+        "passed": true
+      }
+    }
+
+  ]
+}];
+      // @@METRICS_DATA_END@@
+
+      function loadMetrics() {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('dashboard').style.display = 'none';
+        document.getElementById('error').style.display = 'none';
+
+        try {
+          if (metricsData.length === 0) {
+            throw new Error(
+              'Nenhuma métrica encontrada. Execute um backup primeiro.',
+            );
+          }
+
+          // Processa e exibe dados
+          displayMetrics();
+
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+        } catch (error) {
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('error').style.display = 'block';
+          document.getElementById('error').className = 'error';
+          document.getElementById('error').innerHTML = `
+                    <strong>❌ Erro ao carregar métricas:</strong><br>
+                    ${error.message}<br><br>
+                    <strong>Como resolver:</strong><br>
+                    Execute um backup: <code>./scripts/backup-postgres.sh</code>
+                `;
+        }
+      }
+
+      function displayMetrics() {
+        // Calcula estatísticas gerais
+        const totalBackups = metricsData.reduce(
+          (sum, day) => sum + day.summary.total_backups,
+          0,
+        );
+        const totalFailed = metricsData.reduce(
+          (sum, day) => sum + day.summary.failed_backups,
+          0,
+        );
+        const successRate = (
+          (totalBackups / (totalBackups + totalFailed)) *
+          100
+        ).toFixed(1);
+        const totalSize = metricsData
+          .reduce((sum, day) => sum + day.summary.total_size_mb, 0)
+          .toFixed(2);
+        const avgDuration = (
+          metricsData.reduce(
+            (sum, day) => sum + day.summary.duration_seconds,
+            0,
+          ) / metricsData.length
+        ).toFixed(1);
+
+        // Atualiza cards
+        document.getElementById('totalBackups').textContent = totalBackups;
+        document.getElementById('successRate').innerHTML =
+          `${successRate}<span class="stat-unit">%</span>`;
+        document.getElementById('totalSize').innerHTML =
+          `${totalSize}<span class="stat-unit">MB</span>`;
+        document.getElementById('avgDuration').innerHTML =
+          `${avgDuration}<span class="stat-unit">s</span>`;
+
+        // Cria gráficos
+        createSizeChart();
+        createDurationChart();
+
+        // Preenche tabelas
+        fillDatabaseTable();
+        fillHistoryTable();
+      }
+
+      function createSizeChart() {
+        const ctx = document.getElementById('sizeChart').getContext('2d');
+
+        if (sizeChart) sizeChart.destroy();
+
+        // Se só tem 1 ponto, usar gráfico de barras
+        const chartType = metricsData.length === 1 ? 'bar' : 'line';
+
+        sizeChart = new Chart(ctx, {
+          type: chartType,
+          data: {
+            labels: metricsData.map((d) => d.date),
+            datasets: [
+              {
+                label: 'Tamanho Total (MB)',
+                data: metricsData.map((d) => d.summary.total_size_mb),
+                borderColor: '#667eea',
+                backgroundColor: chartType === 'bar' ? '#667eea' : 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4,
+                fill: chartType === 'line',
+                borderWidth: 2,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: {
+                display: true,
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return context.dataset.label + ': ' + context.parsed.y.toFixed(3) + ' MB';
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  callback: function(value) {
+                    return value.toFixed(3) + ' MB';
+                  }
+                },
+                title: {
+                  display: true,
+                  text: 'Tamanho (MB)',
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function createDurationChart() {
+        const ctx = document.getElementById('durationChart').getContext('2d');
+
+        if (durationChart) durationChart.destroy();
+
+        durationChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: metricsData.map((d) => d.date),
+            datasets: [
+              {
+                label: 'Duração (segundos)',
+                data: metricsData.map((d) => d.summary.duration_seconds),
+                backgroundColor: '#764ba2',
+                borderWidth: 1,
+                borderColor: '#5a3a7f',
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: {
+                display: true,
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    return context.dataset.label + ': ' + context.parsed.y + 's';
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  stepSize: 1,
+                  callback: function(value) {
+                    if (value % 1 === 0) {
+                      return value + 's';
+                    }
+                  }
+                },
+                title: {
+                  display: true,
+                  text: 'Segundos',
+                },
+              },
+            },
+          },
+        });
+      }
+
+      function fillDatabaseTable() {
+        const tbody = document.getElementById('databaseTableBody');
+        tbody.innerHTML = '';
+
+        // Pega último dia com dados
+        const lastDay = metricsData[metricsData.length - 1];
+
+        lastDay.databases.forEach((db) => {
+          const row = tbody.insertRow();
+          row.innerHTML = `
+                    <td><strong>${db.name}</strong></td>
+                    <td>${lastDay.date}</td>
+                    <td>${db.size_human}</td>
+                    <td>${db.tables_count}</td>
+                    <td class="${db.success ? 'status-success' : 'status-failed'}">
+                        ${db.success ? '✅ Sucesso' : '❌ Falha'}
+                    </td>
+                    <td>${db.validation.passed ? '✅ Validado' : '❌ Falhou'}</td>
+                `;
+        });
+      }
+
+      function fillHistoryTable() {
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '';
+
+        metricsData
+          .slice()
+          .reverse()
+          .forEach((day) => {
+            const row = tbody.insertRow();
+            row.innerHTML = `
+                    <td><strong>${day.date}</strong></td>
+                    <td>${day.summary.total_backups}</td>
+                    <td class="status-success">${day.summary.total_backups - day.summary.failed_backups}</td>
+                    <td class="${day.summary.failed_backups > 0 ? 'status-failed' : ''}">${day.summary.failed_backups}</td>
+                    <td>${day.summary.total_size_mb.toFixed(2)} MB</td>
+                    <td>${day.summary.duration_seconds}s</td>
+                `;
+          });
+      }
+
+      // Carrega ao abrir a página
+      window.addEventListener('load', loadMetrics);
+    </script>
+  </body>
+</html>

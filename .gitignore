@@ -33,6 +33,10 @@ bkps/*
 *.dump
 *.backup
 
+# Métricas JSON (geradas automaticamente)
+databases/postgres/bkps/metrics/*
+!databases/postgres/bkps/metrics/.gitkeep
+
 # Arquivos temporários
 temp/
 tmp/
