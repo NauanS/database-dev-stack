@@ -4,10 +4,10 @@ Ambiente Docker completo com múltiplos bancos de dados e ferramentas de adminis
 
 ## 📋 Serviços Disponíveis
 
-| Banco de Dados | Versão | Porta | Interface Web    | Porta Interface | Backup Automatizado     |
-| -------------- | ------ | ----- | ---------------- | --------------- | ----------------------- |
-| PostgreSQL     | 15.4   | 5432  | **pgAdmin4**     | **5050**        | ✅ **Sistema completo** |
-| MySQL          | 8.0    | 3306  | Adminer          | 8080            | -                       |
+| Banco de Dados | Versão     | Porta | Interface Web    | Porta Interface | Backup Automatizado     |
+| -------------- | ---------- | ----- | ---------------- | --------------- | ----------------------- |
+| PostgreSQL     | 18-alpine  | 5432  | **pgAdmin4**     | **5050**        | ✅ **Sistema completo** |
+| MySQL          | 8.0        | 3306  | Adminer          | 8080            | -                       |
 | MariaDB        | 10.11  | 3307  | Adminer          | 8080            | -                       |
 | MongoDB        | 7.0    | 27017 | Mongo Express    | 8081            | -                       |
 | Redis          | 7.2    | 6379  | **RedisInsight** | **5540**        | -                       |
