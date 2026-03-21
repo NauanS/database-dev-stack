@@ -13,7 +13,7 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 # Configurações (com valores padrão se não definidos no .env)
-BACKUP_DIR="${BACKUP_DIR:-../bkps}"
+BACKUP_DIR="${BACKUP_DIR:-$SCRIPT_DIR/../bkps}"
 CONTAINER_NAME="${CONTAINER_NAME:-postgres}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
@@ -149,11 +149,34 @@ for DB in $DATABASES; do
         TOTAL_SIZE=$((TOTAL_SIZE + BACKUP_SIZE_BYTES))
         log "✓ Backup de '$DB' concluído: $BACKUP_SIZE (comprimido)"
         
-        # Teste de restore (verifica se o arquivo pode ser lido)
-        if zcat "$BACKUP_FILE" | head -n 1 > /dev/null 2>&1; then
-            RESTORE_STATUS="✅"
+        # Teste de restore REAL em banco temporário
+        log "🔍 Testando restore de '$DB'..."
+        TEST_DB="${DB}_restore_test_$$"
+        
+        # Cria banco temporário
+        if docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -c "CREATE DATABASE $TEST_DB;" > /dev/null 2>&1; then
+            # Tenta fazer restore completo
+            if zcat "$BACKUP_FILE" | docker exec -i "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$TEST_DB" > /dev/null 2>&1; then
+                # Valida que o banco tem conteúdo (conta tabelas)
+                TABLE_COUNT=$(docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$TEST_DB" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | xargs)
+                
+                if [ -n "$TABLE_COUNT" ] && [ "$TABLE_COUNT" -ge 0 ]; then
+                    RESTORE_STATUS="✅"
+                    log "✓ Teste de restore OK ($TABLE_COUNT tabelas)"
+                else
+                    RESTORE_STATUS="⚠️"
+                    warning "Restore executou mas banco parece vazio"
+                fi
+            else
+                RESTORE_STATUS="❌"
+                warning "Falha ao restaurar backup em banco de teste"
+            fi
+            
+            # Limpa banco temporário
+            docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -c "DROP DATABASE IF EXISTS $TEST_DB;" > /dev/null 2>&1
         else
             RESTORE_STATUS="❌"
+            warning "Não foi possível criar banco de teste"
         fi
         
         # Armazena detalhes

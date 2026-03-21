@@ -4,14 +4,14 @@ Ambiente Docker completo com múltiplos bancos de dados e ferramentas de adminis
 
 ## 📋 Serviços Disponíveis
 
-| Banco de Dados | Versão     | Porta | Interface Web    | Porta Interface | Backup Automatizado     |
-| -------------- | ---------- | ----- | ---------------- | --------------- | ----------------------- |
-| PostgreSQL     | 18-alpine  | 5432  | **pgAdmin4**     | **5050**        | ✅ **Sistema completo** |
-| MySQL          | 8.0        | 3306  | Adminer          | 8080            | -                       |
-| MariaDB        | 10.11  | 3307  | Adminer          | 8080            | -                       |
-| MongoDB        | 7.0    | 27017 | Mongo Express    | 8081            | -                       |
-| Redis          | 7.2    | 6379  | **RedisInsight** | **5540**        | -                       |
-| Firebird       | 3.0    | 3050  | -                | -               | -                       |
+| Banco de Dados | Versão    | Porta | Interface Web    | Porta Interface | Backup Automatizado     |
+| -------------- | --------- | ----- | ---------------- | --------------- | ----------------------- |
+| PostgreSQL     | 18-alpine | 5432  | **pgAdmin4**     | **5050**        | ✅ **Sistema completo** |
+| MySQL          | 8.0       | 3306  | Adminer          | 8080            | -                       |
+| MariaDB        | 10.11     | 3307  | Adminer          | 8080            | -                       |
+| MongoDB        | 7.0       | 27017 | Mongo Express    | 8081            | -                       |
+| Redis          | 7.2       | 6379  | **RedisInsight** | **5540**        | -                       |
+| Firebird       | 3.0       | 3050  | -                | -               | -                       |
 
 > **💾 Backup PostgreSQL**: Sistema completo com notificações Discord, Google Drive sync e automação. [Ver documentação →](databases/postgres/README.md)
 

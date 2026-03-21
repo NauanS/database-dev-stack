@@ -86,3 +86,4 @@ secrets/
 .secrets/
 .env.*
 !.env.example
+databases/bkps/
