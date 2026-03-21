@@ -26,7 +26,10 @@ logs/
 
 # Backups
 backups/
+bkps/*
+!bkps/.gitkeep
 *.sql
+*.sql.gz
 *.dump
 *.backup
 
@@ -65,11 +68,13 @@ docker-compose.local.yml
 monitoring/grafana/data/
 monitoring/prometheus/data/
 
-# Dados específicos dos bancos
-postgres/
-mysql/
-mariadb/
-mongodb/
+# Dados específicos dos bancos (apenas a pasta data/)
+data/postgres/
+data/mysql/
+data/mariadb/
+data/mongodb/
+data/redis/
+data/firebird/
 redis-data/
 firebird_data/
 

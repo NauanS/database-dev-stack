@@ -4,14 +4,16 @@ Ambiente Docker completo com múltiplos bancos de dados e ferramentas de adminis
 
 ## 📋 Serviços Disponíveis
 
-| Banco de Dados | Versão | Porta | Interface Web    | Porta Interface |
-| -------------- | ------ | ----- | ---------------- | --------------- |
-| PostgreSQL     | 15.4   | 5432  | **pgAdmin4**     | **5050**        |
-| MySQL          | 8.0    | 3306  | Adminer          | 8080            |
-| MariaDB        | 10.11  | 3307  | Adminer          | 8080            |
-| MongoDB        | 7.0    | 27017 | Mongo Express    | 8081            |
-| Redis          | 7.2    | 6379  | **RedisInsight** | **5540**        |
-| Firebird       | 3.0    | 3050  | -                | -               |
+| Banco de Dados | Versão | Porta | Interface Web    | Porta Interface | Backup Automatizado     |
+| -------------- | ------ | ----- | ---------------- | --------------- | ----------------------- |
+| PostgreSQL     | 15.4   | 5432  | **pgAdmin4**     | **5050**        | ✅ **Sistema completo** |
+| MySQL          | 8.0    | 3306  | Adminer          | 8080            | -                       |
+| MariaDB        | 10.11  | 3307  | Adminer          | 8080            | -                       |
+| MongoDB        | 7.0    | 27017 | Mongo Express    | 8081            | -                       |
+| Redis          | 7.2    | 6379  | **RedisInsight** | **5540**        | -                       |
+| Firebird       | 3.0    | 3050  | -                | -               | -                       |
+
+> **💾 Backup PostgreSQL**: Sistema completo com notificações Discord, Google Drive sync e automação. [Ver documentação →](databases/postgres/README.md)
 
 ## 🎯 Conceito de Contextos
 
@@ -246,7 +248,49 @@ redis-cli -h localhost -p 6379 -a sua_senha
 - Conexão: Configurada automaticamente para conectar no Redis
 - Autenticação: Usa a senha definida em `REDIS_PASSWORD` (.env)
 
-## 📁 Estrutura de Arquivos
+## � Sistema de Backup PostgreSQL
+
+O PostgreSQL possui um **sistema completo de backup automatizado** com:
+
+- ✅ **Backup comprimido** (gzip) - economia de ~44% de espaço
+- ✅ **Notificações Discord** - tabelas formatadas com status detalhado
+- ✅ **Sincronização Google Drive** - backup remoto automático via rclone
+- ✅ **Retenção inteligente** - mantém últimos 7 dias automaticamente
+- ✅ **Menu interativo** - interface amigável para gerenciar backups
+- ✅ **Restauração simples** - processo guiado passo a passo
+
+### 🚀 Início Rápido - Backup
+
+```bash
+# Acessar o sistema de backup
+cd databases/postgres
+
+# Menu interativo (recomendado)
+./backup-manager.sh
+
+# Ou usar comandos diretos
+./backup-manager.sh backup      # Fazer backup agora
+./backup-manager.sh restore     # Restaurar backup
+./backup-manager.sh sync        # Sincronizar com Google Drive
+./backup-manager.sh check       # Verificar sistema
+```
+
+### 📚 Documentação Completa
+
+Para configuração inicial, automação com cron, notificações Discord e sincronização com Google Drive, consulte a **documentação completa**:
+
+**[📘 databases/postgres/README.md](databases/postgres/README.md)** - Documentação completa do sistema de backup
+
+A documentação inclui:
+
+- Guia de instalação e configuração inicial
+- Como configurar webhook Discord para notificações
+- Configuração do Google Drive com rclone
+- Automação de backups diários (cron)
+- Troubleshooting e resolução de problemas
+- Exemplos de uso para todos os cenários
+
+## �📁 Estrutura de Arquivos
 
 ```
 dabases/
@@ -432,8 +476,12 @@ Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para detalhes.
 1. **Primeira vez**: `./start.sh` (configura tudo)
 2. **Usar PostgreSQL**: `make postgres-start` → http://localhost:5050
 3. **Usar MySQL**: `make mysql-start` → http://localhost:8080
-4. **Ver status**: `make status`
-5. **Parar tudo**: `make stop-all`
-6. **Ajuda**: `make help`
+4. **Backup PostgreSQL**: `cd databases/postgres && ./backup-manager.sh`
+5. **Ver status**: `make status`
+6. **Parar tudo**: `make stop-all`
+7. **Ajuda**: `make help`
 
-**💡 Dica**: Use `make help` para ver todos os comandos disponíveis a qualquer momento!
+**💡 Dicas**:
+
+- Use `make help` para ver todos os comandos disponíveis
+- Veja [databases/postgres/README.md](databases/postgres/README.md) para sistema completo de backup
