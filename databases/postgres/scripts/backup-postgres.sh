@@ -133,24 +133,34 @@ TOTAL_SIZE=0
 # Array para armazenar detalhes de cada banco
 declare -a BACKUP_DETAILS
 
-# 3. Faz backup de cada banco (comprimido)
-for DB in $DATABASES; do
-    BACKUP_FILE="$BACKUP_DIR/${DB}_${DATE_FORMAT}.sql.gz"
+# Diretório temporário para resultados paralelos
+TEMP_DIR="$BACKUP_DIR/.temp_$$"
+mkdir -p "$TEMP_DIR"
+
+# Função para fazer backup de um único banco (executa em paralelo)
+backup_database() {
+    local DB=$1
+    local RESULT_FILE="$TEMP_DIR/${DB}.result"
+    local BACKUP_FILE="$BACKUP_DIR/${DB}_${DATE_FORMAT}.sql.gz"
     
-    log "📦 Fazendo backup de '$DB'..."
+    # Redireciona logs para arquivo específico do banco
+    exec > "$TEMP_DIR/${DB}.log" 2>&1
     
-    DB_STATUS="✅"
-    DB_ERROR=""
-    RESTORE_STATUS="⏭️"
+    echo "[$(date +"%Y-%m-%d %H:%M:%S")] 📦 Fazendo backup de '$DB'..."
     
-    if docker exec "$CONTAINER_NAME" pg_dump -U "$POSTGRES_USER" -d "$DB" | gzip > "$BACKUP_FILE" 2>/dev/null; then
+    local DB_STATUS="✅"
+    local RESTORE_STATUS="⏭️"
+    local BACKUP_SIZE="N/A"
+    local BACKUP_SIZE_BYTES=0
+    local TABLE_COUNT=0
+    
+    if docker exec "$CONTAINER_NAME" pg_dump -U "$POSTGRES_USER" -d "$DB" 2>/dev/null | gzip > "$BACKUP_FILE" 2>/dev/null; then
         BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
         BACKUP_SIZE_BYTES=$(du -b "$BACKUP_FILE" | cut -f1)
-        TOTAL_SIZE=$((TOTAL_SIZE + BACKUP_SIZE_BYTES))
-        log "✓ Backup de '$DB' concluído: $BACKUP_SIZE (comprimido)"
+        echo "[$(date +"%Y-%m-%d %H:%M:%S")] ✓ Backup de '$DB' concluído: $BACKUP_SIZE (comprimido)"
         
         # Teste de restore REAL em banco temporário
-        log "🔍 Testando restore de '$DB'..."
+        echo "[$(date +"%Y-%m-%d %H:%M:%S")] 🔍 Testando restore de '$DB'..."
         TEST_DB="${DB}_restore_test_$$"
         
         # Cria banco temporário
@@ -162,34 +172,76 @@ for DB in $DATABASES; do
                 
                 if [ -n "$TABLE_COUNT" ] && [ "$TABLE_COUNT" -ge 0 ]; then
                     RESTORE_STATUS="✅"
-                    log "✓ Teste de restore OK ($TABLE_COUNT tabelas)"
+                    echo "[$(date +"%Y-%m-%d %H:%M:%S")] ✓ Teste de restore OK ($TABLE_COUNT tabelas)"
                 else
                     RESTORE_STATUS="⚠️"
-                    warning "Restore executou mas banco parece vazio"
+                    echo "[$(date +"%Y-%m-%d %H:%M:%S")] ⚠️ Restore executou mas banco parece vazio"
                 fi
             else
                 RESTORE_STATUS="❌"
-                warning "Falha ao restaurar backup em banco de teste"
+                echo "[$(date +"%Y-%m-%d %H:%M:%S")] ❌ Falha ao restaurar backup em banco de teste"
             fi
             
             # Limpa banco temporário
             docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -c "DROP DATABASE IF EXISTS $TEST_DB;" > /dev/null 2>&1
         else
             RESTORE_STATUS="❌"
-            warning "Não foi possível criar banco de teste"
+            echo "[$(date +"%Y-%m-%d %H:%M:%S")] ❌ Não foi possível criar banco de teste"
         fi
         
-        # Armazena detalhes
-        BACKUP_DETAILS+=("$DB|$BACKUP_SIZE|✅|$RESTORE_STATUS")
-        ((BACKUP_COUNT++))
+        # Salva resultado
+        echo "SUCCESS|$DB|$BACKUP_SIZE|✅|$RESTORE_STATUS|$BACKUP_SIZE_BYTES|$TABLE_COUNT" > "$RESULT_FILE"
     else
-        error "✗ Falha ao fazer backup de '$DB'"
+        echo "[$(date +"%Y-%m-%d %H:%M:%S")] ✗ Falha ao fazer backup de '$DB'"
         rm -f "$BACKUP_FILE"
-        DB_STATUS="❌"
+        echo "FAILED|$DB|N/A|❌|❌|0|0" > "$RESULT_FILE"
+    fi
+}
+
+# 3. Faz backup de cada banco em paralelo
+log "3️⃣  Iniciando backups paralelos..."
+declare -a PIDS
+
+for DB in $DATABASES; do
+    backup_database "$DB" &
+    PIDS+=($!)
+done
+
+# Aguarda todos os backups terminarem
+log "⏳ Aguardando conclusão de ${#PIDS[@]} backup(s) paralelo(s)..."
+wait
+
+# Coleta resultados dos arquivos temporários
+for DB in $DATABASES; do
+    RESULT_FILE="$TEMP_DIR/${DB}.result"
+    LOG_FILE_DB="$TEMP_DIR/${DB}.log"
+    
+    if [ -f "$RESULT_FILE" ]; then
+        # Lê resultado
+        IFS='|' read -r STATUS DB_NAME BACKUP_SIZE DB_STATUS RESTORE_STATUS BACKUP_SIZE_BYTES TABLE_COUNT < "$RESULT_FILE"
+        
+        # Exibe log do banco
+        cat "$LOG_FILE_DB" 2>/dev/null
+        
+        # Adiciona aos detalhes
+        BACKUP_DETAILS+=("$DB_NAME|$BACKUP_SIZE|$DB_STATUS|$RESTORE_STATUS")
+        
+        # Atualiza contadores
+        if [ "$STATUS" = "SUCCESS" ]; then
+            ((BACKUP_COUNT++))
+            TOTAL_SIZE=$((TOTAL_SIZE + BACKUP_SIZE_BYTES))
+        else
+            ((FAILED_COUNT++))
+        fi
+    else
+        error "✗ Resultado não encontrado para '$DB'"
         BACKUP_DETAILS+=("$DB|N/A|❌|❌")
         ((FAILED_COUNT++))
     fi
 done
+
+# Limpa diretório temporário
+rm -rf "$TEMP_DIR"
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
