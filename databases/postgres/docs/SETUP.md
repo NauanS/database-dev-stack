@@ -13,6 +13,7 @@ docker --version    # Precisa estar instalado
 docker ps          # Container PostgreSQL rodando
 curl --version     # Já vem na maioria dos sistemas
 gzip --version     # Já vem na maioria dos sistemas
+netlify --version  # Netlify CLI para deploy do dashboard
 ```
 
 Se algo faltar:
@@ -23,6 +24,9 @@ sudo apt install docker.io curl gzip
 
 # macOS
 brew install docker curl
+
+# Netlify CLI (npm)
+npm install -g netlify-cli
 ```
 
 ---
@@ -78,6 +82,9 @@ BACKUP_DIR=../bkps
 RETENTION_DAYS=7
 GDRIVE_REMOTE=gdrive-backup
 GDRIVE_PATH=bkps
+NETLIFY_AUTH_TOKEN=SEU_TOKEN_NETLIFY
+NETLIFY_SITE_ID=SEU_SITE_ID
+NETLIFY_SITE_URL=https://seu-site.netlify.app
 ```
 
 **Salvar:** Ctrl+O, Enter, Ctrl+X
@@ -154,6 +161,12 @@ chmod +x *.sh
 ./backup-manager.sh check
 ```
 
+No teste de backup, o script também:
+
+1. Atualiza o `dashboard.html`
+2. Copia para `public/index.html`
+3. Faz deploy em produção no Netlify (`--prod`)
+
 ### 6. Configurar Automação (Cron)
 
 ```bash
@@ -192,6 +205,7 @@ Use esta lista para garantir que tudo está funcionando:
 - [ ] curl instalado
 - [ ] gzip instalado
 - [ ] rclone instalado
+- [ ] Netlify CLI instalada
 
 ### Configuração
 
@@ -200,6 +214,9 @@ Use esta lista para garantir que tudo está funcionando:
 - [ ] rclone configurado (remote: `gdrive-backup`)
 - [ ] Pasta `bkps` criada no Google Drive
 - [ ] Scripts com permissão de execução (`chmod +x`)
+- [ ] `NETLIFY_AUTH_TOKEN` configurado em `scripts/.env`
+- [ ] `NETLIFY_SITE_ID` configurado em `scripts/.env`
+- [ ] `NETLIFY_SITE_URL` configurado em `scripts/.env`
 
 ### Testes
 
@@ -209,6 +226,8 @@ Use esta lista para garantir que tudo está funcionando:
 - [ ] `./sync-gdrive.sh` executou sem erros
 - [ ] Arquivos aparecem no Google Drive
 - [ ] `./backup-manager.sh check` mostra tudo OK
+- [ ] Dashboard publicado no Netlify após backup
+- [ ] Alertas de erro no Discord mostram link de `NETLIFY_SITE_URL`
 
 ### Automação
 
@@ -300,6 +319,19 @@ chmod +x databases/postgres/scripts/*.sh
 1. Verificar URL em `.env`
 2. Testar manualmente com curl (comando acima)
 3. Verificar permissões do webhook no Discord
+
+### ❌ "Deploy Netlify não executa"
+
+```bash
+# Verificar se CLI está instalada
+netlify --version
+
+# Verificar variáveis no arquivo correto
+cd databases/postgres/scripts
+grep -E "NETLIFY_AUTH_TOKEN|NETLIFY_SITE_ID|NETLIFY_SITE_URL" .env
+```
+
+Se `NETLIFY_AUTH_TOKEN` ou `NETLIFY_SITE_ID` estiverem vazios, o backup continua, mas o deploy é ignorado com aviso no log.
 
 ---
 

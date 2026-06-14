@@ -23,6 +23,9 @@ LOG_FILE="$BACKUP_DIR/backup.log"
 
 # Discord Webhook (variável de ambiente)
 DISCORD_WEBHOOK="${DISCORD_WEBHOOK_URL_BKP:-}"
+NETLIFY_AUTH_TOKEN="${NETLIFY_AUTH_TOKEN:-}"
+NETLIFY_SITE_ID="${NETLIFY_SITE_ID:-}"
+NETLIFY_SITE_URL="${NETLIFY_SITE_URL:-}"
 
 # Cores para output
 RED='\033[0;31m'
@@ -86,10 +89,19 @@ EOF
         -d "$payload" > /dev/null 2>&1 || true
 }
 
+append_dashboard_link() {
+    local description="$1"
+    if [[ -n "$NETLIFY_SITE_URL" && "$NETLIFY_SITE_URL" =~ ^https?:// ]]; then
+        printf "%s\\n\\n🌐 Dashboard: %s" "$description" "$NETLIFY_SITE_URL"
+    else
+        printf "%s" "$description"
+    fi
+}
+
 # Verifica se o container está rodando
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     error "Container '$CONTAINER_NAME' não está rodando!"
-    send_discord_notification "❌ Backup Falhou" "Container '$CONTAINER_NAME' não está rodando!" 15158332
+    send_discord_notification "❌ Backup Falhou" "$(append_dashboard_link "Container '$CONTAINER_NAME' não está rodando!")" 15158332
     exit 1
 fi
 
@@ -119,7 +131,7 @@ DATABASES=$(docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -t -c "SELECT
 
 if [ -z "$DATABASES" ]; then
     warning "Nenhum banco de dados encontrado para backup."
-    send_discord_notification "⚠️  Backup Concluído com Aviso" "Nenhum banco de dados encontrado" 16776960
+    send_discord_notification "⚠️  Backup Concluído com Aviso" "$(append_dashboard_link "Nenhum banco de dados encontrado")" 16776960
     exit 0
 fi
 
@@ -310,6 +322,46 @@ log "📊 Métricas salvas em: $METRICS_FILE"
 # Atualiza dashboard.html chamando script separado
 "$SCRIPT_DIR/update-dashboard.sh"
 
+# 5. Deploy do dashboard no Netlify (não bloqueante)
+NETLIFY_DEPLOY_STATUS="ignorado"
+NETLIFY_DEPLOY_NOTE="Deploy não configurado"
+PUBLISH_DIR="$SCRIPT_DIR/../public"
+DASHBOARD_FILE="$SCRIPT_DIR/../dashboard.html"
+
+log "🌐 Preparando deploy do dashboard..."
+mkdir -p "$PUBLISH_DIR"
+
+if [ -f "$DASHBOARD_FILE" ]; then
+    cp "$DASHBOARD_FILE" "$PUBLISH_DIR/index.html"
+    cp "$DASHBOARD_FILE" "$PUBLISH_DIR/dashboard.html"
+
+    if ! command -v netlify >/dev/null 2>&1; then
+        warning "Netlify CLI não encontrada. Instale com: npm install -g netlify-cli"
+        NETLIFY_DEPLOY_NOTE="Netlify CLI não encontrada"
+    elif [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+        warning "NETLIFY_AUTH_TOKEN ou NETLIFY_SITE_ID não configurados em scripts/.env"
+        NETLIFY_DEPLOY_NOTE="Credenciais Netlify ausentes"
+    else
+        log "🚀 Publicando dashboard no Netlify (produção)..."
+        if netlify deploy \
+            --prod \
+            --dir="$PUBLISH_DIR" \
+            --site="$NETLIFY_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" >> "$LOG_FILE" 2>&1; then
+            NETLIFY_DEPLOY_STATUS="sucesso"
+            NETLIFY_DEPLOY_NOTE="Deploy realizado com sucesso"
+            log "✅ Deploy Netlify concluído"
+        else
+            NETLIFY_DEPLOY_STATUS="falha"
+            NETLIFY_DEPLOY_NOTE="Falha no deploy do Netlify"
+            warning "Falha ao publicar dashboard no Netlify"
+        fi
+    fi
+else
+    warning "Dashboard não encontrado para deploy: $DASHBOARD_FILE"
+    NETLIFY_DEPLOY_NOTE="Dashboard não encontrado"
+fi
+
 # Limpa diretório temporário
 rm -rf "$TEMP_DIR"
 
@@ -326,6 +378,7 @@ fi
 log "  • Tamanho total: ${TOTAL_SIZE_MB}MB (comprimido)"
 log "  • Duração: ${DURATION}s"
 log "  • Diretório: $BACKUP_DIR"
+log "  • Deploy Netlify: $NETLIFY_DEPLOY_STATUS ($NETLIFY_DEPLOY_NOTE)"
 log "=========================================="
 
 # Notificação Discord (sucesso)
@@ -343,6 +396,7 @@ if [ $FAILED_COUNT -eq 0 ]; then
     
     TABLE="${TABLE}\`\`\`"
     TABLE="${TABLE}\\n**Total:** ${TOTAL_SIZE_MB}MB  •  **Duração:** ${DURATION}s  •  **Data:** $(date '+%d/%m/%Y %H:%M:%S')"
+    TABLE="$(append_dashboard_link "$TABLE")"
     
     send_discord_notification \
         "✅ Backup PostgreSQL Concluído" \
@@ -362,6 +416,8 @@ else
     
     TABLE="${TABLE}\`\`\`"
     TABLE="${TABLE}\\n**Sucessos:** $BACKUP_COUNT  •  **Falhas:** $FAILED_COUNT  •  **Duração:** ${DURATION}s"
+    TABLE="${TABLE}\\n**Deploy Netlify:** ${NETLIFY_DEPLOY_STATUS}"
+    TABLE="$(append_dashboard_link "$TABLE")"
     
     send_discord_notification \
         "⚠️  Backup Concluído com Erros" \

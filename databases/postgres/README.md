@@ -7,6 +7,7 @@ Sistema automatizado de backup, restauração e sincronização para PostgreSQL 
 - ✅ **Backup comprimido** - economia de ~44% com gzip
 - ✅ **Validação automática** - integridade verificada após cada backup
 - ✅ **Dashboard visual** - métricas e gráficos em HTML (Chart.js)
+- ✅ **Deploy automático Netlify** - publica dashboard em CDN via CLI
 - ✅ **Notificações Discord** - tabelas formatadas com status
 - ✅ **Google Drive sync** - backup remoto automático via rclone
 - ✅ **Retenção inteligente** - mantém últimos 7 dias
@@ -32,6 +33,7 @@ databases/postgres/
 │   ├── load-env.sh             # Carregador de .env
 │   ├── .env                    # Configurações locais (não commitar!)
 │   └── .env.example            # Template de configuração
+├── public/                     # Artefato publicado no Netlify (index.html)
 └── bkps/                       # Backups locais (.sql.gz)
     └── metrics/                # Métricas em JSON (não commitadas)
         └── .gitkeep            # Garante estrutura no git
@@ -118,6 +120,8 @@ cd databases/postgres
 - Compressão gzip automática
 - Validação de integridade (zcat)
 - Retenção de 7 dias (remove backups antigos)
+- Atualiza `dashboard.html` com as métricas do backup
+- Publica dashboard no Netlify (modo produção) usando `NETLIFY_AUTH_TOKEN` e `NETLIFY_SITE_ID`
 - Notificação Discord com tabela:
 
 ```
@@ -270,6 +274,32 @@ xdg-open dashboard.html
 
 > 💡 **Dica:** Edite os JSONs em `bkps/metrics/` e rode `update-dashboard.sh` para testar visualizações!
 
+### 6. Deploy do Dashboard no Netlify
+
+O deploy é executado automaticamente no final de `./backup-postgres.sh`.
+
+Fluxo:
+
+1. Gera/atualiza `dashboard.html` com métricas recentes
+2. Copia para `public/index.html` e `public/dashboard.html`
+3. Executa `netlify deploy --prod --dir=public` em modo não interativo
+
+Pré-requisitos:
+
+- Netlify CLI instalada (`npm install -g netlify-cli`)
+- Variáveis configuradas em `scripts/.env`:
+
+```bash
+NETLIFY_AUTH_TOKEN=seu_token_netlify
+NETLIFY_SITE_ID=seu_site_id
+NETLIFY_SITE_URL=https://seu-site.netlify.app
+```
+
+Comportamento em falha:
+
+- Falha de deploy **não interrompe** o backup
+- Status do deploy aparece no log e no resumo final
+
 ---
 
 ## ⏰ Automação
@@ -326,6 +356,11 @@ RETENTION_DAYS=7
 # Google Drive
 GDRIVE_REMOTE=gdrive-ns17
 GDRIVE_PATH=bkps
+
+# Netlify (dashboard CDN)
+NETLIFY_AUTH_TOKEN=
+NETLIFY_SITE_ID=
+NETLIFY_SITE_URL=
 ```
 
 **Editar:**
@@ -355,6 +390,18 @@ curl -X POST "$DISCORD_WEBHOOK_URL_BKP" \
   -H "Content-Type: application/json" \
   -d '{"content": "Teste"}'
 ```
+
+### Deploy Netlify não acontece
+
+```bash
+# Verificar CLI
+netlify --version
+
+# Verificar variáveis
+grep -E "NETLIFY_AUTH_TOKEN|NETLIFY_SITE_ID|NETLIFY_SITE_URL" scripts/.env
+```
+
+Se `NETLIFY_SITE_URL` estiver configurada, os alertas de erro no Discord incluem o link público do dashboard.
 
 ### rclone não autorizado
 

@@ -29,6 +29,7 @@ mkdir -p "$BACKUP_DIR"
 
 # Discord Webhook (variável de ambiente)
 DISCORD_WEBHOOK="${DISCORD_WEBHOOK_URL_BKP:-}"
+NETLIFY_SITE_URL="${NETLIFY_SITE_URL:-}"
 
 log() {
     echo -e "${GREEN}[$(date +"%Y-%m-%d %H:%M:%S")]${NC} $1" | tee -a "$LOG_FILE"
@@ -71,6 +72,15 @@ EOF
         -d "$payload" > /dev/null 2>&1 || true
 }
 
+append_dashboard_link() {
+    local description="$1"
+    if [[ -n "$NETLIFY_SITE_URL" && "$NETLIFY_SITE_URL" =~ ^https?:// ]]; then
+        printf "%s\\n\\n🌐 Dashboard: %s" "$description" "$NETLIFY_SITE_URL"
+    else
+        printf "%s" "$description"
+    fi
+}
+
 # Verifica se rclone está instalado
 if ! command -v rclone &> /dev/null; then
     error "rclone não está instalado!"
@@ -85,7 +95,7 @@ if ! command -v rclone &> /dev/null; then
     echo "  - Storage: Google Drive (opção 18)"
     echo "  - Siga as instruções de autenticação"
     echo ""
-    send_discord_notification "❌ Sync Falhou" "rclone não instalado no servidor" 15158332
+    send_discord_notification "❌ Sync Falhou" "$(append_dashboard_link "rclone não instalado no servidor")" 15158332
     exit 1
 fi
 
@@ -96,7 +106,7 @@ if ! rclone listremotes | grep -q "^${GDRIVE_REMOTE}:$"; then
     echo -e "${YELLOW}Configure o Google Drive:${NC}"
     echo "  rclone config"
     echo ""
-    send_discord_notification "❌ Sync Falhou" "Remote Google Drive não configurado" 15158332
+    send_discord_notification "❌ Sync Falhou" "$(append_dashboard_link "Remote Google Drive não configurado")" 15158332
     exit 1
 fi
 
@@ -220,6 +230,7 @@ else
     
     TABLE="${TABLE}\`\`\`"
     TABLE="${TABLE}\\n**Sucessos:** $UPLOAD_SUCCESS  •  **Falhas:** $UPLOAD_FAILED  •  **Duração:** ${DURATION}s"
+    TABLE="$(append_dashboard_link "$TABLE")"
     
     send_discord_notification \
         "⚠️  Sincronização Concluída com Erros" \
