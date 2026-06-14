@@ -386,6 +386,26 @@ make clean
 make passwords
 ```
 
+### Erro no PostgreSQL 18+: "unused mount/volume"
+
+Se ao subir `postgres` aparecer erro citando dados em `/var/lib/postgresql/data`, a causa
+mais comum e uma incompatibilidade de layout de volume entre versoes antigas e PostgreSQL 18+.
+
+Este projeto usa PostgreSQL 18 e o volume deve ser montado em `/var/lib/postgresql`.
+
+Para ambiente de desenvolvimento descartavel, execute:
+
+```bash
+# Parar e remover recursos do compose
+docker compose down
+
+# Subir novamente apenas o contexto do PostgreSQL
+make postgres-start
+```
+
+Se voce precisa preservar dados antigos, nao apague os dados diretamente: realize migracao com
+`pg_upgrade` entre as versoes.
+
 ### Problemas de permissão
 
 ```bash

@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: '--auth-host=scram-sha-256'
     volumes:
-      - './data/postgres:/var/lib/postgresql/data'
+      - './data/postgres:/var/lib/postgresql'
       - './configs/postgres/init:/docker-entrypoint-initdb.d'
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
