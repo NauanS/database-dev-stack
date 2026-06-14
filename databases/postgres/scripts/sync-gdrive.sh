@@ -19,10 +19,13 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configurações (com valores padrão se não definidos no .env)
-BACKUP_DIR="${BACKUP_DIR:-../bkps}"
+BACKUP_DIR="${BACKUP_DIR:-$SCRIPT_DIR/../bkps}"
 GDRIVE_REMOTE="${GDRIVE_REMOTE:-gdrive-backup}"
 GDRIVE_PATH="${GDRIVE_PATH:-bkps}"
 LOG_FILE="$BACKUP_DIR/sync.log"
+
+# Garante que o diretório de logs exista antes do primeiro tee
+mkdir -p "$BACKUP_DIR"
 
 # Discord Webhook (variável de ambiente)
 DISCORD_WEBHOOK="${DISCORD_WEBHOOK_URL_BKP:-}"
