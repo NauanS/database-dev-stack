@@ -1,511 +1,154 @@
-# 🚀 Ambiente de Desenvolvimento - Bancos de Dados
+# Ambiente de Bancos de Dados (Docker)
 
-Ambiente Docker completo com múltiplos bancos de dados e ferramentas de administração, otimizado para desenvolvimento local com **arquitetura baseada em contextos** - execute apenas os serviços que você precisa!
+Ambiente local com vários bancos de dados e suas interfaces de administração, organizado por **contextos**: cada banco sobe junto com a sua UI e você roda só o que precisa. Inclui um **sistema de backup do PostgreSQL** com restore de teste, métricas, dashboard, notificações no Discord e sync com o Google Drive.
 
-## 📋 Serviços Disponíveis
+Pensado para desenvolvimento local. Nenhum serviço sobe sozinho (`restart: 'no'`).
 
-| Banco de Dados | Versão    | Porta | Interface Web    | Porta Interface | Backup Automatizado     |
-| -------------- | --------- | ----- | ---------------- | --------------- | ----------------------- |
-| PostgreSQL     | 18-alpine | 5432  | **pgAdmin4**     | **5050**        | ✅ **Sistema completo** |
-| MySQL          | 8.0       | 3306  | Adminer          | 8080            | -                       |
-| MariaDB        | 10.11     | 3307  | Adminer          | 8080            | -                       |
-| MongoDB        | 7.0       | 27017 | Mongo Express    | 8081            | -                       |
-| Redis          | 7.2       | 6379  | **RedisInsight** | **5540**        | -                       |
-| Firebird       | 3.0       | 3050  | -                | -               | -                       |
+## Serviços
 
-> **💾 Backup PostgreSQL**: Sistema completo com notificações Discord, Google Drive sync e automação. [Ver documentação →](databases/postgres/README.md)
+| Banco      | Versão       | Porta | Interface web       | Porta da UI |
+| ---------- | ------------ | ----- | ------------------- | ----------- |
+| PostgreSQL | 18-alpine    | 5432  | pgAdmin4 7.8        | 5050        |
+| MySQL      | 8.0.34       | 3306  | Adminer 4.8.1       | 8080        |
+| MariaDB    | 10.11.5      | 3307  | Adminer 4.8.1       | 8080        |
+| MongoDB    | 7.0.2        | 27017 | Mongo Express 1.0.2 | 8081        |
+| Redis      | 7.2.1-alpine | 6379  | RedisInsight 2.54   | 5540        |
+| Firebird   | 3.0.10       | 3050  | -                   | -           |
 
-## 🎯 Conceito de Contextos
+As portas podem ser trocadas no `.env`.
 
-Este ambiente utiliza uma **arquitetura baseada em contextos**, onde cada banco de dados pode ser iniciado individualmente junto com suas ferramentas de administração específicas. Isso permite:
+## Pré-requisitos
 
-- ✅ **Economia de recursos**: Execute apenas o que você precisa
-- ✅ **Isolamento**: Cada contexto é independente
-- ✅ **Flexibilidade**: Combine diferentes contextos conforme necessário
-- ✅ **Performance**: Menor consumo de memória e CPU
+Docker Engine 20.10+, Docker Compose 2.0+, Make e Bash.
 
-## 🚀 Início Rápido
-
-### Pré-requisitos
-
-Certifique-se de ter instalado:
-
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- Make
-- Bash
-
-### 1. Configuração Inicial
+## Início rápido
 
 ```bash
-# Clone o repositório
-git clone <seu-repo>
-cd dabases
+git clone https://github.com/NauanS/database-dev-stack.git
+cd database-dev-stack
 
-# Execute a configuração inicial (OBRIGATÓRIO na primeira vez)
-./start.sh
-
-# Isso irá:
-# ✅ Criar a rede externa 'development_environment'
-# ✅ Gerar arquivo .env com senhas seguras (via generate-passwords.sh, se ainda não existir)
-# ✅ Criar diretórios e configs necessários (data/, configs/redis, configs/mysql)
-#
-# Se aparecer o aviso sobre data/pgadmin, rode: sudo chown -R 5050:5050 data/pgadmin
+./start.sh              # cria a rede, data/, configs e o .env com senhas aleatórias
+make postgres-start     # PostgreSQL + pgAdmin4
+make status             # ver o que está rodando
+make postgres-stop      # parar
 ```
 
-### 2. Primeiro Uso - Exemplo Completo
+Se o `start.sh` avisar sobre `data/pgadmin`, corrija a permissão (o pgAdmin roda como uid 5050):
 
 ```bash
-# Iniciar PostgreSQL com pgAdmin4
-make postgres-start
-
-# Aguardar alguns segundos para inicialização
-sleep 10
-
-# Verificar se está funcionando
-make status
-
-# Acessar pgAdmin4: http://localhost:5050
-# Acessar PostgreSQL: localhost:5432
-
-# Quando terminar
-make postgres-stop
+sudo chown -R 5050:5050 data/pgadmin
 ```
 
-### 2. Comandos por Contexto
+## Comandos
 
-> **💡 Dica**: Cada contexto inicia o banco de dados junto com sua interface de administração específica.
+| Contexto   | Iniciar               | Parar                | Shell                 |
+| ---------- | --------------------- | -------------------- | --------------------- |
+| PostgreSQL | `make postgres-start` | `make postgres-stop` | `make postgres-shell` |
+| MySQL      | `make mysql-start`    | `make mysql-stop`    | `make mysql-shell`    |
+| MariaDB    | `make mariadb-start`  | `make mariadb-stop`  | `make mariadb-shell`  |
+| MongoDB    | `make mongodb-start`  | `make mongodb-stop`  | `make mongodb-shell`  |
+| Redis      | `make redis-start`    | `make redis-stop`    | `make redis-shell`    |
+| Firebird   | `make firebird-start` | `make firebird-stop` | -                     |
 
-#### PostgreSQL + pgAdmin4
+Cada `*-start` sobe o banco junto com a interface dele. Para subir só o banco, use `docker compose up -d postgres`; para derrubar só a UI, `docker compose stop pgadmin`.
+
+Comandos gerais:
 
 ```bash
-make postgres-start    # Inicia PostgreSQL + pgAdmin4
-make postgres-stop     # Para PostgreSQL + pgAdmin4
-
-# URLs:
-# PostgreSQL: localhost:5432
-# pgAdmin4: http://localhost:5050
+make help                    # lista tudo
+make status                  # status dos serviços
+make stop-all                # derruba todos os serviços
+make logs SERVICE=postgres   # logs de um serviço
+make backup SERVICE=postgres # dump simples em backups/ (postgres, mysql, mariadb)
+make passwords               # gera novas senhas
+make clean                   # remove containers e volumes (mantém imagens, data/ e a rede)
 ```
 
-#### MySQL + Adminer
+`./stop.sh` aceita `--list`, `--volumes`, `--images` e `--clean [--data]` (o `--data` apaga `data/`).
+
+## Credenciais e acesso
+
+As senhas são geradas em `.env` (não versionado). Para ver os nomes das variáveis sem expor os valores:
 
 ```bash
-make mysql-start       # Inicia MySQL + Adminer
-make mysql-stop        # Para MySQL + Adminer
-
-# URLs:
-# MySQL: localhost:3306
-# Adminer: http://localhost:8080
+grep -E "USER|PASSWORD|DATABASE" .env | sed 's/=.*/=…/'
 ```
 
-#### MariaDB + Adminer
+- **pgAdmin4:** `http://localhost:5050` com `PGADMIN_EMAIL` e `PGADMIN_PASSWORD`.
+- **Adminer:** `http://localhost:8080`; informe sistema (MySQL/MariaDB/PostgreSQL), servidor (`mysql`, `mariadb`, `postgres`), usuário e senha.
+- **Mongo Express:** `http://localhost:8081` com `MONGO_EXPRESS_USER` e `MONGO_EXPRESS_PASSWORD`.
+- **RedisInsight:** `http://localhost:5540`; o Redis exige `REDIS_PASSWORD`.
+
+Conexão manual, por exemplo:
 
 ```bash
-make mariadb-start     # Inicia MariaDB + Adminer
-make mariadb-stop      # Para MariaDB + Adminer
-
-# URLs:
-# MariaDB: localhost:3307
-# Adminer: http://localhost:8080
-```
-
-#### MongoDB + Mongo Express
-
-```bash
-make mongodb-start     # Inicia MongoDB + Mongo Express
-make mongodb-stop      # Para MongoDB + Mongo Express
-
-# URLs:
-# MongoDB: localhost:27017
-# Mongo Express: http://localhost:8081
-```
-
-#### Redis + RedisInsight
-
-```bash
-make redis-start       # Inicia Redis + RedisInsight
-make redis-stop        # Para Redis + RedisInsight
-
-# URLs:
-# Redis: localhost:6379
-# RedisInsight: http://localhost:5540
-```
-
-#### Firebird
-
-```bash
-make firebird-start    # Inicia Firebird
-make firebird-stop     # Para Firebird
-
-# URL: localhost:3050
-```
-
-### 3. Comandos Gerais
-
-```bash
-make help              # Ver todos os comandos disponíveis
-make setup             # Configuração inicial do ambiente
-make status            # Status de todos os serviços
-make stop-all          # Para todos os serviços ativos
-make logs SERVICE=nome # Ver logs de um serviço específico
-make clean             # Remove containers/volumes (mantém imagens, data/ e rede externa)
-```
-
-## 🔐 Credenciais de Acesso
-
-Todas as credenciais são geradas automaticamente e armazenadas no arquivo `.env`.
-
-### Visualizar credenciais:
-
-```bash
-cat .env | grep -E "(USER|PASSWORD|DATABASE)"
-```
-
-### Conectar via linha de comando:
-
-**PostgreSQL:**
-
-```bash
-# Usar credenciais do .env automaticamente
-make postgres-shell
-
-# Ou conectar manualmente
 psql -h localhost -p 5432 -U postgres -d dev_database
+mysql -h 127.0.0.1 -P 3306 -u mysql_user -p
+mongosh "mongodb://admin:<senha>@localhost:27017"
+redis-cli -h localhost -p 6379 -a <senha>
 ```
 
-**MySQL:**
+## Backup do PostgreSQL
+
+Fica em `databases/postgres/`. O menu interativo reúne tudo:
 
 ```bash
-# Usar credenciais do .env automaticamente
-make mysql-shell
-
-# Ou conectar manualmente
-mysql -h localhost -P 3306 -u mysql_user -p
-```
-
-**MariaDB:**
-
-```bash
-# Usar credenciais do .env automaticamente
-make mariadb-shell
-
-# Ou conectar manualmente
-mysql -h localhost -P 3307 -u mariadb_user -p
-```
-
-**MongoDB:**
-
-```bash
-# Usar credenciais do .env automaticamente
-make mongodb-shell
-
-# Ou conectar manualmente
-mongosh "mongodb://admin:senha@localhost:27017"
-```
-
-**Redis:**
-
-```bash
-# Usar credenciais do .env automaticamente
-make redis-shell
-
-# Ou conectar manualmente
-redis-cli -h localhost -p 6379 -a sua_senha
-```
-
-## 🌐 Interfaces Web
-
-| Interface         | URL                   | Suporta        | Credenciais                       |
-| ----------------- | --------------------- | -------------- | --------------------------------- |
-| **pgAdmin4**      | http://localhost:5050 | PostgreSQL     | Ver arquivo .env                  |
-| **Adminer**       | http://localhost:8080 | MySQL, MariaDB | Sistema/servidor/usuário do banco |
-| **Mongo Express** | http://localhost:8081 | MongoDB        | Ver arquivo .env                  |
-| **RedisInsight**  | http://localhost:5540 | Redis          | Conexão automática configurada    |
-
-### Como acessar as interfaces:
-
-**pgAdmin4 (PostgreSQL):**
-
-- URL: http://localhost:5050
-- Email: Definido em `PGADMIN_EMAIL` (.env)
-- Senha: Definida em `PGADMIN_PASSWORD` (.env)
-
-**Adminer (MySQL/MariaDB):**
-
-- URL: http://localhost:8080
-- Sistema: MySQL ou MariaDB
-- Servidor: mysql ou mariadb
-- Usuário: Conforme definido no .env
-- Senha: Conforme definido no .env
-
-**Mongo Express (MongoDB):**
-
-- URL: http://localhost:8081
-- Usuário: Definido em `MONGO_EXPRESS_USER` (.env)
-- Senha: Definida em `MONGO_EXPRESS_PASSWORD` (.env)
-
-**RedisInsight (Redis):**
-
-- URL: http://localhost:5540
-- Conexão: Configurada automaticamente para conectar no Redis
-- Autenticação: Usa a senha definida em `REDIS_PASSWORD` (.env)
-
-## � Sistema de Backup PostgreSQL
-
-O PostgreSQL possui um **sistema completo de backup automatizado** com:
-
-- ✅ **Backup comprimido** (gzip) - economia de ~44% de espaço
-- ✅ **Notificações Discord** - tabelas formatadas com status detalhado
-- ✅ **Sincronização Google Drive** - backup remoto automático via rclone
-- ✅ **Retenção inteligente** - mantém últimos 7 dias automaticamente
-- ✅ **Menu interativo** - interface amigável para gerenciar backups
-- ✅ **Restauração simples** - processo guiado passo a passo
-
-### 🚀 Início Rápido - Backup
-
-```bash
-# Acessar o sistema de backup
 cd databases/postgres
-
-# Menu interativo (recomendado)
-./backup-manager.sh
-
-# Ou usar comandos diretos
-./backup-manager.sh backup      # Fazer backup agora
-./backup-manager.sh restore     # Restaurar backup
-./backup-manager.sh sync        # Sincronizar com Google Drive
-./backup-manager.sh check       # Verificar sistema
+./backup-manager.sh            # menu
+./backup-manager.sh backup     # backup agora
+./backup-manager.sh restore    # restaurar
+./backup-manager.sh sync       # enviar ao Google Drive
+./backup-manager.sh check      # verificar ambiente
+./backup-manager.sh metrics    # abrir o dashboard
 ```
 
-### 📚 Documentação Completa
+O que o backup faz:
 
-Para configuração inicial, automação com cron, notificações Discord e sincronização com Google Drive, consulte a **documentação completa**:
+1. Salva roles e configurações globais (`pg_dumpall --globals-only`).
+2. Faz `pg_dump` comprimido de cada banco, em paralelo.
+3. **Testa o restore** de cada dump em um banco temporário.
+4. Grava métricas em `bkps/metrics/` (um JSON por execução) e gera o dashboard.
+5. Publica o dashboard no Netlify (nomes dos bancos anonimizados), avisa no Discord e apaga backups com mais de `RETENTION_DAYS` (padrão 7).
 
-**[📘 databases/postgres/README.md](databases/postgres/README.md)** - Documentação completa do sistema de backup
+O sync com o Google Drive (via rclone) envia só o que ainda não está lá e aplica a mesma retenção no Drive.
 
-A documentação inclui:
+Configuração (`databases/postgres/scripts/.env`, copiado do `.env.example`): webhook do Discord, remote do rclone, retenção, credenciais do Netlify e `DASHBOARD_MASK_DB_NAMES`. O `setup.sh` (opção 4 do menu) configura o rclone e o cron (backup 13:00, sync 13:30).
 
-- Guia de instalação e configuração inicial
-- Como configurar webhook Discord para notificações
-- Configuração do Google Drive com rclone
-- Automação de backups diários (cron)
-- Troubleshooting e resolução de problemas
-- Exemplos de uso para todos os cenários
+Documentação detalhada: [databases/postgres/README.md](databases/postgres/README.md), [SETUP.md](databases/postgres/docs/SETUP.md) e [SECURITY.md](databases/postgres/docs/SECURITY.md).
 
-## �📁 Estrutura de Arquivos
+## Estrutura
 
 ```
-dabases/
-├── docker-compose.yml    # Definições dos serviços
-├── Makefile             # Comandos por contexto
-├── start.sh             # Script de configuração inicial
-├── stop.sh              # Script para parar serviços
-├── generate-passwords.sh # Gerador de senhas seguras
-├── .env                 # Variáveis de ambiente (auto-gerado)
-├── .env.example         # Modelo de configuração
-├── .gitignore           # Arquivos ignorados pelo Git
-├── configs/             # Configurações dos bancos (versionadas)
-│   ├── mysql/conf.d/    # custom.cnf
-│   ├── redis/           # redis.conf (carregado pelo container)
-│   └── */init/          # scripts de inicialização (conteúdo ignorado pelo Git)
-├── databases/postgres/  # Sistema de backup do PostgreSQL (ver README próprio)
-└── data/                # Dados persistentes (ignorado pelo Git)
-    ├── postgres/
-    ├── mysql/
-    ├── mariadb/
-    ├── mongodb/
-    ├── redis/
-    ├── redisinsight/
-    ├── firebird/
-    └── pgadmin/
+docker-compose.yml        serviços (rede externa development_environment)
+Makefile                  comandos por contexto
+start.sh / stop.sh        preparar / parar o ambiente
+generate-passwords.sh     gera o .env
+configs/                  redis.conf, mysql/conf.d, */init/
+databases/postgres/       sistema de backup (scripts, dashboard, docs)
+data/                     dados dos bancos (criado pelo start.sh, não versionado)
+AGENTS.md                 instruções para agentes de código (CLAUDE.md e GEMINI.md apontam para ele)
 ```
 
-## 🔧 Configuração Avançada
+## Documentação
 
-### Regenerar Senhas
+- [databases/postgres/README.md](databases/postgres/README.md): sistema de backup do PostgreSQL (uso, automação, troubleshooting).
+- [databases/postgres/docs/SETUP.md](databases/postgres/docs/SETUP.md): instalação e configuração passo a passo (Discord, rclone, Netlify, cron).
+- [databases/postgres/docs/SECURITY.md](databases/postgres/docs/SECURITY.md): segurança e checagens antes de commitar.
+- [AGENTS.md](AGENTS.md): instruções para agentes de código; o [CLAUDE.md](CLAUDE.md) e o [GEMINI.md](GEMINI.md) apontam para ele.
 
-```bash
-# Gerar novas senhas seguras
-make passwords
-# ou
-./generate-passwords.sh
-```
+## Solução de problemas
 
-### Variáveis de Ambiente Personalizadas
+- **Porta em uso:** `make status`, depois `make stop-all` ou `lsof -i :5432`.
+- **PostgreSQL 18, erro de "unused mount/volume":** o volume deve ser montado em `/var/lib/postgresql` (já está assim no compose). Se for um ambiente descartável, `docker compose down` e suba de novo; se precisa dos dados antigos, migre com `pg_upgrade`.
+- **Permissão em `data/`:** `sudo chown -R $USER:$USER data/` (exceto `data/pgadmin`, que deve ser `5050:5050`).
+- **Redis pede senha:** use `REDIS_PASSWORD` do `.env` (`redis-cli -a <senha>`).
+- **Logs:** `make logs SERVICE=nome` ou `docker compose logs -f nome`.
 
-Edite o arquivo `.env` para personalizar:
+## Segurança
 
-- Portas dos serviços
-- Credenciais de acesso
-- Configurações específicas dos bancos
+- `.env` e `databases/postgres/scripts/.env` guardam senhas, token do Netlify e webhook do Discord e **nunca** devem ser commitados (já estão no `.gitignore`, assim como backups, logs e métricas).
+- As portas dos bancos são publicadas em todas as interfaces, o que é aceitável para uso local. Em redes compartilhadas, publique em `127.0.0.1` (ex.: `'127.0.0.1:5432:5432'`).
 
-### Rede Externa
+## Licença
 
-O projeto utiliza uma rede externa `development_environment` que é compartilhada entre aplicações:
-
-- Criada automaticamente pelo `./start.sh`
-- Preservada durante limpezas (`make clean`), assim como as imagens e o conteúdo de `data/`
-- Permite comunicação entre diferentes projetos Docker
-
-## 🐛 Resolução de Problemas
-
-### Porta já em uso
-
-```bash
-# Verificar quais serviços estão rodando
-make status
-
-# Parar serviços conflitantes
-make stop-all
-
-# Verificar processos nas portas
-lsof -i :5432  # PostgreSQL
-lsof -i :3306  # MySQL
-lsof -i :27017 # MongoDB
-```
-
-### Logs de depuração
-
-```bash
-# Ver logs de um serviço específico
-make logs SERVICE=postgres
-
-# Ver logs em tempo real
-docker compose logs -f postgres
-
-# Ver logs de todos os serviços
-docker compose logs
-```
-
-### Resetar ambiente
-
-```bash
-# Parar todos os serviços e limpar (preserva rede)
-make clean
-
-# Reconfigurar do zero
-./start.sh
-
-# Regenerar senhas
-make passwords
-```
-
-### Erro no PostgreSQL 18+: "unused mount/volume"
-
-Se ao subir `postgres` aparecer erro citando dados em `/var/lib/postgresql/data`, a causa
-mais comum e uma incompatibilidade de layout de volume entre versoes antigas e PostgreSQL 18+.
-
-Este projeto usa PostgreSQL 18 e o volume deve ser montado em `/var/lib/postgresql`.
-
-Para ambiente de desenvolvimento descartavel, execute:
-
-```bash
-# Parar e remover recursos do compose
-docker compose down
-
-# Subir novamente apenas o contexto do PostgreSQL
-make postgres-start
-```
-
-Se voce precisa preservar dados antigos, nao apague os dados diretamente: realize migracao com
-`pg_upgrade` entre as versoes.
-
-### Problemas de permissão
-
-```bash
-# Corrigir permissões dos diretórios de dados
-sudo chown -R $USER:$USER data/
-
-# Verificar se o Docker está funcionando
-docker --version
-docker compose --version
-```
-
-## 📚 Exemplos de Uso
-
-### Desenvolvimento Full-Stack
-
-```bash
-# Backend com PostgreSQL + Frontend com cache Redis
-make postgres-start
-make redis-start
-```
-
-### Testes de Migração
-
-```bash
-# Testar migração MySQL → PostgreSQL
-make mysql-start
-make postgres-start
-```
-
-### Desenvolvimento Mobile
-
-```bash
-# API com MongoDB
-make mongodb-start
-```
-
-## 🚦 Status e Monitoramento
-
-```bash
-# Ver status geral
-make status
-
-# Verificar saúde dos serviços
-docker compose ps
-
-# Monitorar recursos
-docker stats
-```
-
-## ⚙️ Requisitos do Sistema
-
-- **Docker Engine**: 20.10 ou superior
-- **Docker Compose**: 2.0 ou superior
-- **Make**: Para executar comandos
-- **Bash**: Shell para scripts
-- **Memória RAM**: 2GB+ disponível
-- **Espaço em disco**: 5GB+ para dados dos bancos
-
-### Verificar Requisitos
-
-```bash
-# Verificar versões instaladas
-docker --version
-docker compose --version
-make --version
-
-# Verificar recursos do sistema
-free -h              # Memória disponível
-df -h .              # Espaço em disco
-```
-
-## 🤝 Contribuindo
-
-1. Fork o projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para detalhes.
-
----
-
-## 🎯 Resumo Rápido
-
-1. **Primeira vez**: `./start.sh` (configura tudo)
-2. **Usar PostgreSQL**: `make postgres-start` → http://localhost:5050
-3. **Usar MySQL**: `make mysql-start` → http://localhost:8080
-4. **Backup PostgreSQL**: `cd databases/postgres && ./backup-manager.sh`
-5. **Ver status**: `make status`
-6. **Parar tudo**: `make stop-all`
-7. **Ajuda**: `make help`
-
-**💡 Dicas**:
-
-- Use `make help` para ver todos os comandos disponíveis
-- Veja [databases/postgres/README.md](databases/postgres/README.md) para sistema completo de backup
+MIT. Veja o arquivo [LICENSE](LICENSE).
