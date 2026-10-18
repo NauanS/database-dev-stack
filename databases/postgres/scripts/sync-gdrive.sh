@@ -22,6 +22,7 @@ NC='\033[0m'
 BACKUP_DIR="${BACKUP_DIR:-$SCRIPT_DIR/../bkps}"
 GDRIVE_REMOTE="${GDRIVE_REMOTE:-gdrive-backup}"
 GDRIVE_PATH="${GDRIVE_PATH:-bkps}"
+RETENTION_DAYS="${RETENTION_DAYS:-7}"
 LOG_FILE="$BACKUP_DIR/sync.log"
 
 # Garante que o diretório de logs exista antes do primeiro tee
@@ -129,13 +130,23 @@ fi
 
 log "📤 Arquivos para sincronizar: $FILE_COUNT"
 
+# Arquivos que já estão no Drive (não reenviar a cada execução)
+REMOTE_FILES=$(rclone lsf "${GDRIVE_REMOTE}:${GDRIVE_PATH}" --files-only 2>/dev/null || true)
+
 # Sincroniza arquivo por arquivo para capturar detalhes
 UPLOAD_SUCCESS=0
 UPLOAD_FAILED=0
+UPLOAD_SKIPPED=0
 TOTAL_SIZE=0
 
 while IFS= read -r file; do
     filename=$(basename "$file")
+
+    if grep -qxF -- "$filename" <<< "$REMOTE_FILES"; then
+        UPLOAD_SKIPPED=$((UPLOAD_SKIPPED + 1))
+        continue
+    fi
+
     filesize=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
     TOTAL_SIZE=$((TOTAL_SIZE + filesize))
     
@@ -153,7 +164,8 @@ while IFS= read -r file; do
     # Marca tempo de upload
     upload_start=$(date +%s)
     
-    if rclone copy "$file" "${GDRIVE_REMOTE}:${GDRIVE_PATH}" --progress 2>&1 | grep -v "Transferred:" | grep -v "Elapsed time:" ; then
+    # O status vem direto do rclone (antes passava por greps que podiam virar "falha" sem saída)
+    if rclone copy "$file" "${GDRIVE_REMOTE}:${GDRIVE_PATH}" >> "$LOG_FILE" 2>&1; then
         upload_end=$(date +%s)
         upload_time=$((upload_end - upload_start))
         
@@ -167,6 +179,12 @@ while IFS= read -r file; do
     fi
 done < <(find "$BACKUP_DIR" -name "*.sql.gz" -type f)
 
+# Retenção no Drive: mesma regra dos backups locais
+log "🗂️  Removendo do Drive backups com mais de ${RETENTION_DAYS} dias..."
+if ! rclone delete "${GDRIVE_REMOTE}:${GDRIVE_PATH}" --min-age "${RETENTION_DAYS}d" --include "*.sql.gz" >> "$LOG_FILE" 2>&1; then
+    log "⚠️ Não foi possível aplicar a retenção no Drive"
+fi
+
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 TOTAL_SIZE_MB=$((TOTAL_SIZE / 1024 / 1024))
@@ -175,10 +193,16 @@ log "=========================================="
 log "✅ Sincronização concluída!"
 log "=========================================="
 log "  • Arquivos enviados: $UPLOAD_SUCCESS"
-[ $UPLOAD_FAILED -gt 0 ] && log "  • Falhas: $UPLOAD_FAILED"
+log "  • Já existiam no Drive: $UPLOAD_SKIPPED"
+if [ $UPLOAD_FAILED -gt 0 ]; then log "  • Falhas: $UPLOAD_FAILED"; fi
 log "  • Tamanho total: ${TOTAL_SIZE_MB}MB"
 log "  • Duração: ${DURATION}s"
 log "=========================================="
+
+# Nada novo para enviar: não notifica
+if [ $((UPLOAD_SUCCESS + UPLOAD_FAILED)) -eq 0 ]; then
+    exit 0
+fi
 
 # Notificação Discord
 if [ $UPLOAD_FAILED -eq 0 ]; then

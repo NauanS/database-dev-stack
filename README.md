@@ -47,8 +47,10 @@ cd dabases
 
 # Isso irá:
 # ✅ Criar a rede externa 'development_environment'
-# ✅ Gerar arquivo .env com senhas seguras
-# ✅ Criar diretórios necessários
+# ✅ Gerar arquivo .env com senhas seguras (via generate-passwords.sh, se ainda não existir)
+# ✅ Criar diretórios e configs necessários (data/, configs/redis, configs/mysql)
+#
+# Se aparecer o aviso sobre data/pgadmin, rode: sudo chown -R 5050:5050 data/pgadmin
 ```
 
 ### 2. Primeiro Uso - Exemplo Completo
@@ -146,7 +148,7 @@ make setup             # Configuração inicial do ambiente
 make status            # Status de todos os serviços
 make stop-all          # Para todos os serviços ativos
 make logs SERVICE=nome # Ver logs de um serviço específico
-make clean             # Limpeza completa (preserva rede externa)
+make clean             # Remove containers/volumes (mantém imagens, data/ e rede externa)
 ```
 
 ## 🔐 Credenciais de Acesso
@@ -302,9 +304,11 @@ dabases/
 ├── .env                 # Variáveis de ambiente (auto-gerado)
 ├── .env.example         # Modelo de configuração
 ├── .gitignore           # Arquivos ignorados pelo Git
-├── configs/             # Configurações dos bancos
-│   ├── mysql/conf.d/
-│   └── redis/
+├── configs/             # Configurações dos bancos (versionadas)
+│   ├── mysql/conf.d/    # custom.cnf
+│   ├── redis/           # redis.conf (carregado pelo container)
+│   └── */init/          # scripts de inicialização (conteúdo ignorado pelo Git)
+├── databases/postgres/  # Sistema de backup do PostgreSQL (ver README próprio)
 └── data/                # Dados persistentes (ignorado pelo Git)
     ├── postgres/
     ├── mysql/
@@ -340,7 +344,7 @@ Edite o arquivo `.env` para personalizar:
 O projeto utiliza uma rede externa `development_environment` que é compartilhada entre aplicações:
 
 - Criada automaticamente pelo `./start.sh`
-- Preservada durante limpezas (`make clean`)
+- Preservada durante limpezas (`make clean`), assim como as imagens e o conteúdo de `data/`
 - Permite comunicação entre diferentes projetos Docker
 
 ## 🐛 Resolução de Problemas

@@ -261,10 +261,11 @@ setup_cron() {
     
     # Adicionar novos jobs
     echo "# PostgreSQL Backup Automático" >> "$temp_cron"
-    echo "$BACKUP_MINUTE $BACKUP_HOUR * * * cd $SCRIPT_DIR && bash $backup_script >> $SCRIPT_DIR/../bkps/backup.log 2>&1" >> "$temp_cron"
+    # Os scripts já gravam em bkps/backup.log e bkps/sync.log; redirecionar de novo duplicaria as linhas
+    echo "$BACKUP_MINUTE $BACKUP_HOUR * * * cd $SCRIPT_DIR && bash $backup_script > /dev/null 2>&1" >> "$temp_cron"
     echo "" >> "$temp_cron"
     echo "# Sincronização Google Drive" >> "$temp_cron"
-    echo "$SYNC_MINUTE $SYNC_HOUR * * * cd $SCRIPT_DIR && bash $sync_script >> $SCRIPT_DIR/../bkps/sync.log 2>&1" >> "$temp_cron"
+    echo "$SYNC_MINUTE $SYNC_HOUR * * * cd $SCRIPT_DIR && bash $sync_script > /dev/null 2>&1" >> "$temp_cron"
     
     # Instalar no cron
     if crontab "$temp_cron"; then

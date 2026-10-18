@@ -5,11 +5,11 @@ Sistema automatizado de backup, restauração e sincronização para PostgreSQL 
 ## 🎯 Funcionalidades
 
 - ✅ **Backup comprimido** - economia de ~44% com gzip
-- ✅ **Validação automática** - integridade verificada após cada backup
+- ✅ **Validação automática** - restore real em banco temporário após cada backup
 - ✅ **Dashboard visual** - métricas e gráficos em HTML (Chart.js)
-- ✅ **Deploy automático Netlify** - publica dashboard em CDN via CLI
+- ✅ **Deploy automático Netlify** - publica dashboard em CDN via CLI (nomes dos bancos anonimizados)
 - ✅ **Notificações Discord** - tabelas formatadas com status
-- ✅ **Google Drive sync** - backup remoto automático via rclone
+- ✅ **Google Drive sync** - envia só arquivos novos e aplica a mesma retenção no Drive
 - ✅ **Retenção inteligente** - mantém últimos 7 dias
 - ✅ **Menu interativo** - interface amigável com backup-manager.sh
 - ✅ **Globals backup** - roles e permissões preservados
@@ -19,7 +19,8 @@ Sistema automatizado de backup, restauração e sincronização para PostgreSQL 
 ```
 databases/postgres/
 ├── backup-manager.sh           # 🎯 Menu principal (COMECE AQUI!)
-├── dashboard.html              # 📊 Dashboard visual de métricas
+├── dashboard.template.html     # 📊 Template do dashboard (versionado)
+├── dashboard.html              # Dashboard gerado a partir do template (não versionado)
 ├── README.md                   # Esta documentação
 ├── docs/                       # Documentação adicional
 │   ├── SETUP.md                # Guia de instalação
@@ -29,13 +30,13 @@ databases/postgres/
 │   ├── backup-postgres.sh      # Backup core
 │   ├── restore-postgres.sh     # Restauração interativa
 │   ├── sync-gdrive.sh          # Sync Google Drive
-│   ├── update-dashboard.sh     # Atualiza dashboard com métricas
+│   ├── update-dashboard.sh     # Gera dashboard.html (template + métricas)
 │   ├── load-env.sh             # Carregador de .env
 │   ├── .env                    # Configurações locais (não commitar!)
 │   └── .env.example            # Template de configuração
-├── public/                     # Artefato publicado no Netlify (index.html)
+├── public/                     # Artefato publicado no Netlify (index.html, gerado, não versionado)
 └── bkps/                       # Backups locais (.sql.gz)
-    └── metrics/                # Métricas em JSON (não commitadas)
+    └── metrics/                # Um JSON por execução (não commitados)
         └── .gitkeep            # Garante estrutura no git
 ```
 
@@ -118,10 +119,10 @@ cd databases/postgres
 - Backup de roles/permissões globais (globals)
 - Backup de todos os bancos de dados
 - Compressão gzip automática
-- Validação de integridade (zcat)
+- Validação com restore real em banco temporário (`ON_ERROR_STOP`) e falha de `pg_dump` detectada (`pipefail`)
 - Retenção de 7 dias (remove backups antigos)
-- Atualiza `dashboard.html` com as métricas do backup
-- Publica dashboard no Netlify (modo produção) usando `NETLIFY_AUTH_TOKEN` e `NETLIFY_SITE_ID`
+- Gera `dashboard.html` com as métricas do backup
+- Publica dashboard no Netlify (modo produção) usando `NETLIFY_AUTH_TOKEN` e `NETLIFY_SITE_ID`, com os nomes dos bancos anonimizados (`db-1`, `db-2`...)
 - Notificação Discord com tabela:
 
 ```
@@ -152,11 +153,13 @@ bkps/
 
 **Fluxo interativo:**
 
-1. Lista backups disponíveis (numerados)
-2. Você escolhe o número
+1. Lista backups disponíveis (numerados, mais recentes primeiro)
+2. Você escolhe o número (ou informa um caminho completo)
 3. Detecta nome do banco automaticamente
-4. Pede confirmação
-5. Restaura (descomprime .gz automaticamente)
+4. Pede confirmação (digite `sim`)
+5. Restaura (descomprime .gz automaticamente; conexões abertas são encerradas com `DROP DATABASE ... WITH (FORCE)`)
+
+Backups `globals_*` (roles) são restaurados no banco `postgres`, sem recriar banco.
 
 **Exemplo:**
 
@@ -167,7 +170,7 @@ Backups disponíveis:
 
 Escolha o número: 1
 Banco detectado: dev_database
-Confirmar restauração? (s/n): s
+Confirma a operação? (digite 'sim' para confirmar): sim
 ✅ Restaurado com sucesso!
 ```
 
@@ -179,7 +182,8 @@ Confirmar restauração? (s/n): s
 
 **O que faz:**
 
-- Upload de todos os `.sql.gz` para Google Drive
+- Upload dos `.sql.gz` que ainda não estão no Google Drive
+- Remove do Drive os backups mais antigos que `RETENTION_DAYS`
 - Métricas individuais de tempo e tamanho
 - Notificação Discord com tabela:
 
@@ -230,7 +234,7 @@ xdg-open dashboard.html
 
 📈 **Gráficos:**
 
-- Evolução do tamanho dos backups (últimos 30 dias)
+- Evolução do tamanho dos backups (últimas 30 execuções)
 - Tempo de execução por backup
 
 📋 **Tabelas:**
@@ -240,11 +244,11 @@ xdg-open dashboard.html
 
 **Como funciona:**
 
-1. Cada backup gera um arquivo JSON em `bkps/metrics/YYYY-MM-DD.json`
-2. O script `update-dashboard.sh` atualiza o `dashboard.html` com os dados
+1. Cada execução de backup gera um arquivo JSON em `bkps/metrics/YYYY-MM-DD_HH-MM-SS.json`
+2. O script `update-dashboard.sh` gera o `dashboard.html` a partir de `dashboard.template.html` embutindo os últimos 30 registros
 3. O dashboard é um arquivo HTML estático - abre direto no navegador!
 
-**Atualizar manualmente:**
+**Regenerar manualmente (o `dashboard.html` não é versionado):**
 
 ```bash
 ./scripts/update-dashboard.sh
@@ -280,8 +284,8 @@ O deploy é executado automaticamente no final de `./backup-postgres.sh`.
 
 Fluxo:
 
-1. Gera/atualiza `dashboard.html` com métricas recentes
-2. Copia para `public/index.html` e `public/dashboard.html`
+1. Gera `dashboard.html` com métricas recentes
+2. Copia para `public/index.html` e, se `DASHBOARD_MASK_DB_NAMES=true` (padrão), troca os nomes dos bancos por `db-1`, `db-2`... (o site do Netlify é público)
 3. Executa `netlify deploy --prod --dir=public` em modo não interativo
 
 Pré-requisitos:
@@ -293,6 +297,7 @@ Pré-requisitos:
 NETLIFY_AUTH_TOKEN=seu_token_netlify
 NETLIFY_SITE_ID=seu_site_id
 NETLIFY_SITE_URL=https://seu-site.netlify.app
+DASHBOARD_MASK_DB_NAMES=true   # false publica os nomes reais dos bancos
 ```
 
 Comportamento em falha:
@@ -304,7 +309,7 @@ Comportamento em falha:
 
 ## ⏰ Automação
 
-O setup já configura cron automático:
+O setup já configura cron automático (os scripts gravam seus próprios logs em `bkps/`, então o cron não redireciona a saída):
 
 **Backup diário:** 13:00  
 **Sync Google Drive:** 13:30
@@ -349,18 +354,19 @@ DISCORD_WEBHOOK_URL_BKP=https://discord.com/api/webhooks/...
 POSTGRES_USER=postgres
 CONTAINER_NAME=postgres
 
-# Backup
-BACKUP_DIR=../bkps
+# Backup (opcional; padrão: ../bkps)
+# BACKUP_DIR=../bkps
 RETENTION_DAYS=7
 
 # Google Drive
-GDRIVE_REMOTE=gdrive-ns17
+GDRIVE_REMOTE=gdrive-backup
 GDRIVE_PATH=bkps
 
 # Netlify (dashboard CDN)
 NETLIFY_AUTH_TOKEN=
 NETLIFY_SITE_ID=
 NETLIFY_SITE_URL=
+DASHBOARD_MASK_DB_NAMES=true
 ```
 
 **Editar:**
@@ -406,7 +412,7 @@ Se `NETLIFY_SITE_URL` estiver configurada, os alertas de erro no Discord incluem
 ### rclone não autorizado
 
 ```bash
-rclone config reconnect gdrive-ns17:
+rclone config reconnect gdrive-backup:
 # Autorize no navegador novamente
 ```
 
@@ -441,8 +447,8 @@ ls -lh bkps/*.sql.gz
 
 **Métricas:**
 
-- `bkps/metrics/*.json` - Métricas em JSON por data (YYYY-MM-DD.json)
-- `dashboard.html` - Visualização interativa das métricas
+- `bkps/metrics/*.json` - Métricas em JSON, uma por execução (YYYY-MM-DD_HH-MM-SS.json)
+- `dashboard.html` - Visualização interativa das métricas (gerada)
 
 **Listar backups:**
 
@@ -453,7 +459,7 @@ ls -lh bkps/*.sql.gz
 **Ver métricas:**
 
 ```bash
-cat bkps/metrics/$(date +%Y-%m-%d).json
+cat "$(ls bkps/metrics/*.json | tail -1)"
 # ou
 ./backup-manager.sh metrics  # Dashboard visual
 ```
@@ -467,7 +473,7 @@ du -sh bkps/
 **Verificar no Google Drive:**
 
 ```bash
-rclone ls gdrive-ns17:bkps
+rclone ls gdrive-backup:bkps
 ```
 
 ---
@@ -479,6 +485,7 @@ rclone ls gdrive-ns17:bkps
 - `scripts/.env` - Webhook Discord e configurações
 - `bkps/*.sql.gz` - Backups dos bancos
 - `bkps/metrics/*.json` - Métricas de backup (geradas automaticamente)
+- `dashboard.html` e `public/` - Gerados a cada backup
 - `*.log` - Logs do sistema
 
 **Template público:**

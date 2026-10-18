@@ -238,15 +238,9 @@ view_metrics() {
     
     local dashboard_path="$SCRIPT_DIR/dashboard.html"
     
-    if [ ! -f "$dashboard_path" ]; then
-        echo -e "${RED}❌ Dashboard não encontrado: $dashboard_path${NC}"
-        pause
-        return
-    fi
-    
     # Verifica se há métricas
     local metrics_dir="$SCRIPT_DIR/bkps/metrics"
-    if [ ! -d "$metrics_dir" ] || [ -z "$(ls -A $metrics_dir/*.json 2>/dev/null)" ]; then
+    if ! compgen -G "$metrics_dir/*.json" > /dev/null; then
         echo -e "${YELLOW}⚠️  Nenhuma métrica encontrada!${NC}"
         echo ""
         echo "Execute um backup primeiro para gerar métricas:"
@@ -256,7 +250,11 @@ view_metrics() {
         return
     fi
     
-    echo -e "${GREEN}✅ Dashboard encontrado: $dashboard_path${NC}"
+    # dashboard.html é gerado (não versionado): regenera a partir do template e das métricas
+    bash "$SCRIPT_DIR/scripts/update-dashboard.sh" || {
+        pause
+        return
+    }
     echo ""
     
     # Abre o arquivo HTML diretamente no navegador

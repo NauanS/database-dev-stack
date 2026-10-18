@@ -82,7 +82,7 @@ postgres-logs: ## 📋 Logs do PostgreSQL
 	@docker compose logs -f postgres
 
 postgres-shell: ## 🐘 Acessa shell do PostgreSQL
-	@docker compose exec postgres psql -U postgres -d dev_database
+	@docker compose exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 # ===================================
 # CONTEXTO MYSQL
@@ -202,17 +202,17 @@ backup: ## 💾 Backup de um contexto (uso: make backup SERVICE=postgres)
 	@echo "$(GREEN)💾 Fazendo backup do $(SERVICE)...$(NC)"
 	@mkdir -p backups
 	@if [ "$(SERVICE)" = "postgres" ]; then \
-		docker compose exec -T postgres pg_dump -U postgres dev_database > backups/postgres_$(shell date +%Y%m%d_%H%M%S).sql; \
+		docker compose exec -T postgres sh -c 'pg_dump -U "$$POSTGRES_USER" "$$POSTGRES_DB"' > backups/postgres_$(shell date +%Y%m%d_%H%M%S).sql; \
 	elif [ "$(SERVICE)" = "mysql" ]; then \
-		docker compose exec -T mysql mysqldump -u root -p$$(grep MYSQL_ROOT_PASSWORD .env | cut -d= -f2) dev_database > backups/mysql_$(shell date +%Y%m%d_%H%M%S).sql; \
+		docker compose exec -T mysql sh -c 'mysqldump -u root -p"$$MYSQL_ROOT_PASSWORD" "$$MYSQL_DATABASE"' > backups/mysql_$(shell date +%Y%m%d_%H%M%S).sql; \
 	elif [ "$(SERVICE)" = "mariadb" ]; then \
-		docker compose exec -T mariadb mysqldump -u root -p$$(grep MARIADB_ROOT_PASSWORD .env | cut -d= -f2) dev_database > backups/mariadb_$(shell date +%Y%m%d_%H%M%S).sql; \
+		docker compose exec -T mariadb sh -c 'mariadb-dump -u root -p"$$MYSQL_ROOT_PASSWORD" "$$MYSQL_DATABASE"' > backups/mariadb_$(shell date +%Y%m%d_%H%M%S).sql; \
 	else \
 		echo "$(RED)❌ Backup não suportado para $(SERVICE)$(NC)"; \
 	fi
 
-clean: ## 🧹 Limpeza completa
-	@echo "$(RED)🧹 Limpeza completa...$(NC)"
+clean: ## 🧹 Remove containers/volumes (mantém imagens, dados em data/ e a rede)
+	@echo "$(RED)🧹 Limpando containers e volumes...$(NC)"
 	@./stop.sh --clean
 
 info: ## ℹ️ Informações do ambiente

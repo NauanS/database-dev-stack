@@ -88,8 +88,8 @@ fi
 
 # Limpeza completa
 if [ "$1" == "--clean" ]; then
-    warn "Limpeza completa do projeto (volumes + imagens)..."
-    docker compose down -v --rmi all --remove-orphans
+    warn "Limpeza do projeto (containers, volumes e órfãos; imagens são mantidas, use --images para removê-las)..."
+    docker compose down -v --remove-orphans
     
     # IMPORTANTE: NÃO removemos a rede 'development_environment' pois é compartilhada
     # entre múltiplas aplicações e deve ser gerenciada pelo start.sh
@@ -110,7 +110,7 @@ echo "  ./stop.sh                    - Para apenas os containers do projeto"
 echo "  ./stop.sh --list             - Lista containers do projeto sem parar"
 echo "  ./stop.sh --volumes          - Para containers e remove volumes do projeto"
 echo "  ./stop.sh --images           - Para containers e remove imagens do projeto"
-echo "  ./stop.sh --clean            - Limpeza completa (preserva rede externa)"
-echo "  ./stop.sh --clean --data     - Limpeza completa + remove dados locais"
+echo "  ./stop.sh --clean            - Remove containers/volumes/órfãos (mantém imagens e rede externa)"
+echo "  ./stop.sh --clean --data     - Idem + remove dados locais (data/)"
 echo ""
 echo "ℹ️  Nota: A rede 'development_environment' é preservada (compartilhada entre aplicações)."

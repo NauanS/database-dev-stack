@@ -13,29 +13,38 @@ data/
 **/data/
 volumes/
 
-# Configurações locais (podem conter dados sensíveis)
-configs/
-# Exceções para arquivos de configuração essenciais
-!configs/mysql/conf.d/custom.cnf
-!configs/redis/redis.conf
+# Configurações (conf.d/redis.conf são versionadas); scripts de init podem ter dados sensíveis
+configs/*/init/*
+!configs/*/init/.gitkeep
 
 # Logs
 logs/
 *.log
 **/*.log
 
-# Backups
+# Backups (em qualquer nível, ex.: databases/postgres/bkps)
 backups/
-bkps/*
-!bkps/.gitkeep
+**/bkps/*
+!**/bkps/.gitkeep
+!**/bkps/metrics
 *.sql
 *.sql.gz
 *.dump
 *.backup
 
 # Métricas JSON (geradas automaticamente)
-databases/postgres/bkps/metrics/*
-!databases/postgres/bkps/metrics/.gitkeep
+**/bkps/metrics/*
+!**/bkps/metrics/.gitkeep
+
+# Dashboard: só o template é versionado; o HTML gerado e a pasta publicada não
+databases/postgres/dashboard.html
+databases/postgres/public/
+
+# Estado local do Netlify CLI (contém caminhos absolutos da máquina)
+.netlify/
+
+# Cópia aninhada acidental da pasta postgres
+databases/postgres/postgres/
 
 # Arquivos temporários
 temp/
@@ -90,4 +99,3 @@ secrets/
 .secrets/
 .env.*
 !.env.example
-databases/bkps/

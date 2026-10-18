@@ -26,6 +26,8 @@ DISCORD_WEBHOOK="${DISCORD_WEBHOOK_URL_BKP:-}"
 NETLIFY_AUTH_TOKEN="${NETLIFY_AUTH_TOKEN:-}"
 NETLIFY_SITE_ID="${NETLIFY_SITE_ID:-}"
 NETLIFY_SITE_URL="${NETLIFY_SITE_URL:-}"
+# Troca os nomes dos bancos por db-1, db-2... na cópia publicada do dashboard
+DASHBOARD_MASK_DB_NAMES="${DASHBOARD_MASK_DB_NAMES:-true}"
 
 # Cores para output
 RED='\033[0;31m'
@@ -98,6 +100,17 @@ append_dashboard_link() {
     fi
 }
 
+# Anonimiza os nomes dos bancos na cópia publicada (o site do Netlify é público)
+mask_db_names() {
+    local file="$1" idx=0 name escaped
+    while IFS= read -r name; do
+        [ -z "$name" ] || [ "$name" = "globals" ] && continue
+        idx=$((idx + 1))
+        escaped=$(printf '%s' "$name" | sed 's/[][\.*^$/]/\\&/g')
+        sed -i "s/\"name\": \"${escaped}\"/\"name\": \"db-${idx}\"/g" "$file"
+    done < <(grep -o '"name": "[^"]*"' "$file" | sed 's/^"name": "//; s/"$//' | sort -u)
+}
+
 # Verifica se o container está rodando
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     error "Container '$CONTAINER_NAME' não está rodando!"
@@ -118,7 +131,7 @@ START_TIME=$(date +%s)
 log "1️⃣  Fazendo backup de roles e configurações globais..."
 GLOBALS_FILE="$BACKUP_DIR/globals_${DATE_FORMAT}.sql.gz"
 
-if docker exec "$CONTAINER_NAME" pg_dumpall -U "$POSTGRES_USER" --globals-only | gzip > "$GLOBALS_FILE" 2>/dev/null; then
+if ( set -o pipefail; docker exec "$CONTAINER_NAME" pg_dumpall -U "$POSTGRES_USER" --globals-only 2>/dev/null | gzip > "$GLOBALS_FILE" ); then
     GLOBALS_SIZE=$(du -h "$GLOBALS_FILE" | cut -f1)
     log "✓ Backup de globals concluído: $GLOBALS_SIZE"
 else
@@ -157,6 +170,9 @@ backup_database() {
     
     # Redireciona logs para arquivo específico do banco
     exec > "$TEMP_DIR/${DB}.log" 2>&1
+
+    # Falha do pg_dump não pode ser mascarada pelo gzip no fim do pipe
+    set -o pipefail
     
     echo "[$(date +"%Y-%m-%d %H:%M:%S")] 📦 Fazendo backup de '$DB'..."
     
@@ -174,20 +190,27 @@ backup_database() {
         # Teste de restore REAL em banco temporário
         echo "[$(date +"%Y-%m-%d %H:%M:%S")] 🔍 Testando restore de '$DB'..."
         TEST_DB="${DB}_restore_test_$$"
+        # Nomes com hífen precisam de aspas como identificador SQL
+        TEST_DB_Q="\"${TEST_DB}\""
         
         # Cria banco temporário
-        if docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -c "CREATE DATABASE $TEST_DB;" > /dev/null 2>&1; then
-            # Tenta fazer restore completo
-            if zcat "$BACKUP_FILE" | docker exec -i "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$TEST_DB" > /dev/null 2>&1; then
-                # Valida que o banco tem conteúdo (conta tabelas)
-                TABLE_COUNT=$(docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$TEST_DB" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | xargs)
+        if docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -c "CREATE DATABASE $TEST_DB_Q;" > /dev/null 2>&1; then
+            # Restore completo; ON_ERROR_STOP faz qualquer erro de SQL virar falha (exit != 0)
+            if zcat "$BACKUP_FILE" | docker exec -i "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$TEST_DB" -v ON_ERROR_STOP=1 -q > /dev/null 2>&1; then
+                # Conta tabelas de todos os schemas de usuário
+                TABLE_COUNT=$(docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -d "$TEST_DB" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema') AND table_type = 'BASE TABLE';" 2>/dev/null | xargs)
                 
-                if [ -n "$TABLE_COUNT" ] && [ "$TABLE_COUNT" -ge 0 ]; then
+                if [[ "$TABLE_COUNT" =~ ^[0-9]+$ ]]; then
                     RESTORE_STATUS="✅"
-                    echo "[$(date +"%Y-%m-%d %H:%M:%S")] ✓ Teste de restore OK ($TABLE_COUNT tabelas)"
+                    if [ "$TABLE_COUNT" -eq 0 ]; then
+                        echo "[$(date +"%Y-%m-%d %H:%M:%S")] ✓ Teste de restore OK (banco sem tabelas)"
+                    else
+                        echo "[$(date +"%Y-%m-%d %H:%M:%S")] ✓ Teste de restore OK ($TABLE_COUNT tabelas)"
+                    fi
                 else
                     RESTORE_STATUS="⚠️"
-                    echo "[$(date +"%Y-%m-%d %H:%M:%S")] ⚠️ Restore executou mas banco parece vazio"
+                    TABLE_COUNT=0
+                    echo "[$(date +"%Y-%m-%d %H:%M:%S")] ⚠️ Restore executou mas não foi possível contar as tabelas"
                 fi
             else
                 RESTORE_STATUS="❌"
@@ -195,7 +218,7 @@ backup_database() {
             fi
             
             # Limpa banco temporário
-            docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -c "DROP DATABASE IF EXISTS $TEST_DB;" > /dev/null 2>&1
+            docker exec "$CONTAINER_NAME" psql -U "$POSTGRES_USER" -c "DROP DATABASE IF EXISTS $TEST_DB_Q WITH (FORCE);" > /dev/null 2>&1
         else
             RESTORE_STATUS="❌"
             echo "[$(date +"%Y-%m-%d %H:%M:%S")] ❌ Não foi possível criar banco de teste"
@@ -259,7 +282,8 @@ TOTAL_SIZE_MB=$(LC_NUMERIC=C awk "BEGIN {printf \"%.3f\", $TOTAL_SIZE / 1024 / 1
 # 4. Salva métricas em JSON
 METRICS_DIR="$BACKUP_DIR/metrics"
 mkdir -p "$METRICS_DIR"
-METRICS_FILE="$METRICS_DIR/${DATE_SIMPLE}.json"
+# Um arquivo por execução (AAAA-MM-DD_HH-MM-SS.json): vários backups no mesmo dia não se sobrescrevem
+METRICS_FILE="$METRICS_DIR/${DATE_FORMAT//:/-}.json"
 
 # Constrói JSON com métricas do dia (força locale para ponto decimal)
 cat > "$METRICS_FILE" << EOF
@@ -333,7 +357,12 @@ mkdir -p "$PUBLISH_DIR"
 
 if [ -f "$DASHBOARD_FILE" ]; then
     cp "$DASHBOARD_FILE" "$PUBLISH_DIR/index.html"
-    cp "$DASHBOARD_FILE" "$PUBLISH_DIR/dashboard.html"
+    # Remove cópia antiga (antes o mesmo HTML era publicado duas vezes)
+    rm -f "$PUBLISH_DIR/dashboard.html"
+
+    if [ "$DASHBOARD_MASK_DB_NAMES" = "true" ]; then
+        mask_db_names "$PUBLISH_DIR/index.html"
+    fi
 
     if ! command -v netlify >/dev/null 2>&1; then
         warning "Netlify CLI não encontrada. Instale com: npm install -g netlify-cli"

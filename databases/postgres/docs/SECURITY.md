@@ -16,6 +16,8 @@ bkps/                           ← Backups dos bancos
 *.log                           ← Logs do sistema
 data/                           ← Dados dos containers
 ~/.config/rclone/rclone.conf   ← Tokens Google Drive
+dashboard.html, public/         ← Gerados a cada backup (o dashboard publicado tem os nomes dos bancos anonimizados)
+.netlify/                       ← Estado local do Netlify CLI (caminhos absolutos)
 ```
 
 **Já está protegido no `.gitignore` ✅**
@@ -24,28 +26,21 @@ data/                           ← Dados dos containers
 
 ## 🔍 Verificação Automática
 
-Execute antes de cada commit:
+O `setup.sh` (etapa 5, "Verificação de Segurança") confere:
+
+- `.env` ignorado pelo git
+- Webhooks Discord expostos em arquivos públicos
+- Backups `.sql` rastreados pelo git
+
+Para rodar uma checagem manual antes de cada commit:
 
 ```bash
-cd databases/postgres/scripts
-./check-sensitive.sh
+git check-ignore -v databases/postgres/scripts/.env     # deve listar a regra do .gitignore
+git ls-files | grep -E '\.env$|\.sql|\.log'            # não deve listar nada
+git grep -nE 'discord.com/api/webhooks/[0-9]'            # não deve listar nada
 ```
 
-**O script verifica:**
-
-- Webhooks Discord expostos
-- Tokens ou senhas
-- Caminhos absolutos pessoais
-- Arquivos sensíveis não ignorados
-
-**Resultado esperado:**
-
-```
-⚠️  1 aviso(s) encontrado(s)
-   Revise os avisos, mas provavelmente está OK
-```
-
-✅ O único aviso deve ser sobre `scripts/.env` local (que está no .gitignore)
+Dica: `chmod 600 databases/postgres/scripts/.env` (o arquivo contém tokens).
 
 ---
 
@@ -54,11 +49,11 @@ cd databases/postgres/scripts
 ### 1. Verificar Segurança
 
 ```bash
-cd databases/postgres
-./scripts/check-sensitive.sh
+git ls-files | grep -E '\.env$|\.sql|\.log'
+git grep -nE 'discord.com/api/webhooks/[0-9]'
 ```
 
-Só prossiga se não houver ❌ erros críticos.
+Só prossiga se os dois comandos não listarem nada.
 
 ### 2. Verificar Status
 
@@ -76,6 +71,7 @@ git status
 **NÃO deve aparecer:**
 
 - ❌ `scripts/.env`
+- ❌ `dashboard.html`, `public/`, `.netlify/`
 - ❌ `bkps/`
 - ❌ `*.sql` ou `*.sql.gz`
 - ❌ `*.log`
@@ -85,8 +81,8 @@ git status
 ```bash
 cd /caminho/do/projeto
 git add .gitignore
-git add databases/postgres/scripts/*.sh
-git add databases/postgres/*.md
+git add databases/postgres/scripts/*.sh databases/postgres/backup-manager.sh
+git add databases/postgres/*.md databases/postgres/dashboard.template.html
 git add databases/postgres/scripts/.env.example
 ```
 
@@ -162,6 +158,8 @@ DISCORD_WEBHOOK_URL_BKP=https://discord.com/api/webhooks/SEU_WEBHOOK
 ./setup.sh
 ```
 
+(ou `./backup-manager.sh`, opção 4, na pasta `databases/postgres`)
+
 Pronto! Sistema configurado.
 
 ---
@@ -209,7 +207,7 @@ git push origin --force --all
 
 Antes de cada commit:
 
-- [ ] Executei `./check-sensitive.sh` sem erros
+- [ ] Rodei as checagens da seção "Verificação" sem resultados
 - [ ] `git status` não mostra `.env`
 - [ ] `git status` não mostra arquivos `.sql` ou `.sql.gz`
 - [ ] `git diff --cached` revisado
@@ -224,9 +222,11 @@ Antes de cada commit:
 
 ```
 databases/postgres/
+├── backup-manager.sh           ✅
+├── dashboard.template.html     ✅
 ├── scripts/
-│   ├── backup-manager.sh       ✅
 │   ├── setup.sh                ✅
+│   ├── update-dashboard.sh     ✅
 │   ├── backup-postgres.sh      ✅
 │   ├── restore-postgres.sh     ✅
 │   ├── sync-gdrive.sh          ✅

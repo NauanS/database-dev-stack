@@ -47,33 +47,39 @@ if ! docker compose version > /dev/null 2>&1; then
     exit 1
 fi
 
-# Verificar se arquivo .env existe
+# Verificar se arquivo .env existe; se não, gera com senhas seguras
 if [ ! -f .env ]; then
     warn "Arquivo .env não encontrado."
-    if [ -f .env.example ]; then
-        log "Copiando .env.example para .env..."
-        cp .env.example .env
-        warn "IMPORTANTE: Edite o arquivo .env com suas configurações antes de continuar."
-        echo "Pressione ENTER para continuar ou Ctrl+C para cancelar..."
-        read
+    if [ -x ./generate-passwords.sh ]; then
+        log "Gerando .env com senhas seguras..."
+        ./generate-passwords.sh
     else
-        error "Arquivo .env.example não encontrado. Não é possível continuar."
+        error "generate-passwords.sh não encontrado/executável. Não é possível gerar o .env."
         exit 1
     fi
 fi
 
 # Criar diretórios necessários
 log "Criando estrutura de diretórios..."
-mkdir -p data/{postgres,mysql,mariadb,mongodb,redis,firebird}
+mkdir -p data/{postgres,mysql,mariadb,mongodb,redis,redisinsight,firebird,pgadmin}
 mkdir -p configs/{postgres/init,mysql/{init,conf.d},mariadb/init,mongodb/init,redis}
 mkdir -p logs
+
+# pgAdmin roda como uid 5050 no container e precisa poder escrever em data/pgadmin
+# (RedisInsight roda como 1000:1000, o uid padrão do usuário Linux)
+if [ "$(stat -c %u data/pgadmin)" != "5050" ]; then
+    warn "data/pgadmin não pertence ao uid 5050 (pgAdmin pode falhar por permissão)."
+    warn "Corrija com: sudo chown -R 5050:5050 data/pgadmin"
+fi
 
 # Criar arquivo de configuração do Redis se não existir
 if [ ! -f configs/redis/redis.conf ]; then
     log "Criando configuração do Redis..."
     cat > configs/redis/redis.conf << EOF
 # Configuração básica do Redis para desenvolvimento
-bind 127.0.0.1
+# Acessível pela rede Docker; a porta é publicada no host pelo compose e protegida por requirepass
+bind 0.0.0.0
+protected-mode yes
 port 6379
 timeout 0
 tcp-keepalive 300
@@ -90,10 +96,12 @@ stop-writes-on-bgsave-error yes
 rdbcompression yes
 rdbchecksum yes
 dbfilename dump.rdb
-dir ./
+dir /data
 appendonly yes
 appendfilename "appendonly.aof"
 appendfsync everysec
+maxmemory 256mb
+maxmemory-policy allkeys-lru
 no-appendfsync-on-rewrite no
 auto-aof-rewrite-percentage 100
 auto-aof-rewrite-min-size 64mb
@@ -138,7 +146,7 @@ innodb_flush_log_at_trx_commit=2
 innodb_flush_method=O_DIRECT
 
 # Logs
-general_log=1
+general_log=0
 general_log_file=/var/lib/mysql/general.log
 slow_query_log=1
 slow_query_log_file=/var/lib/mysql/slow.log
