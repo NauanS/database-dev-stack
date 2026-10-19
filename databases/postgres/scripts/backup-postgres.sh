@@ -94,7 +94,7 @@ EOF
 append_dashboard_link() {
     local description="$1"
     if [[ -n "$NETLIFY_SITE_URL" && "$NETLIFY_SITE_URL" =~ ^https?:// ]]; then
-        printf "%s\\n\\n🌐 Dashboard: %s" "$description" "$NETLIFY_SITE_URL"
+        printf '%s\\n\\n🌐 Dashboard: %s' "$description" "$NETLIFY_SITE_URL"
     else
         printf "%s" "$description"
     fi
